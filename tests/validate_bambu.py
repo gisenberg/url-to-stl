@@ -102,6 +102,10 @@ def main():
     cases = [
         ("standard", {}),
         ("inset", {"treatment": "inset"}),
+        ("inset-square", {"treatment": "inset", "shape": "square"}),
+        ("inset-rectangle", {"treatment": "inset", "shape": "rectangle"}),
+        ("inset-pentagon", {"treatment": "inset", "shape": "pentagon"}),
+        ("inset-hexagon", {"treatment": "inset", "shape": "hexagon"}),
         ("different-first-layer", {"layer_height": 0.16}),
         ("reversed-filaments", {"base_filament": 2, "qr_filament": 1}),
     ]

@@ -83,6 +83,23 @@ def test_inset_geometry_is_connected_watertight_and_scannable():
     test_printed_top_geometry_decodes_exact_url(token, mesh)
 
 
+@pytest.mark.parametrize(
+    "shape,minimum_width",
+    [("circle", 40), ("square", 30), ("rectangle", 40), ("pentagon", 51), ("hexagon", 44)],
+)
+def test_supported_shapes_are_watertight_scannable_and_printable(shape, minimum_width):
+    token = create_token({"url": "https://example.com", "shape": shape, "treatment": "inset", "diameter": 25})
+    mesh = token.mesh()
+    assert token.shape == shape
+    assert token.minimum_diameter == token.diameter == minimum_width
+    assert token.module >= 0.8
+    assert token.shape_width == pytest.approx(minimum_width, abs=1e-5)
+    assert token.shape_height <= token.shape_width + 1e-5
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+    test_printed_top_geometry_decodes_exact_url(token, mesh)
+
+
 def test_full_quiet_zone_fits_inside_circle(token):
     half = (len(token.matrix) + 8) * token.module / 2
     assert math.hypot(half, half) <= token.diameter / 2 - 1 + 1e-9
@@ -180,7 +197,7 @@ def test_rejects_nonwebsite_urls(url):
 def test_clamps_diameter_to_printable_minimum():
     token = create_token({"url": "https://example.com", "diameter": 25})
     assert token.minimum_diameter == token.diameter == 40
-    assert "Diameter increased to 40 mm" in token.warnings[0]
+    assert "Width increased to 40 mm" in token.warnings[0]
 
 
 def test_minimum_diameter_tracks_qr_density():
@@ -218,7 +235,14 @@ def test_different_patterns_survive_stl_welding(url, correction):
 
 
 @pytest.mark.parametrize(
-    "data", [{"base_color": "#000000"}, {"qr_color": "#EEEEEE"}, {"qr_filament": 1}, {"base_filament": 1.5}]
+    "data",
+    [
+        {"base_color": "#000000"},
+        {"qr_color": "#EEEEEE"},
+        {"qr_filament": 1},
+        {"base_filament": 1.5},
+        {"shape": "triangle"},
+    ],
 )
 def test_rejects_unscannable_colors_and_bad_filament_assignments(data):
     with pytest.raises(InputError):

@@ -42,9 +42,95 @@ def luminance(hex_color):
     return sum(v * w for v, w in zip(linear, (0.2126, 0.7152, 0.0722)))
 
 
+TOKEN_SHAPES = {"circle", "square", "rectangle", "pentagon", "hexagon"}
+
+
+def rounded_rectangle(width, height, radius, segments=8):
+    half_width, half_height = width / 2, height / 2
+    corners = [
+        (half_width - radius, half_height - radius, 0),
+        (-half_width + radius, half_height - radius, math.pi / 2),
+        (-half_width + radius, -half_height + radius, math.pi),
+        (half_width - radius, -half_height + radius, math.pi * 1.5),
+    ]
+    return [
+        (
+            round(cx + radius * math.cos(start + math.pi / 2 * index / segments), 6),
+            round(cy + radius * math.sin(start + math.pi / 2 * index / segments), 6),
+        )
+        for cx, cy, start in corners
+        for index in range(segments + 1)
+    ]
+
+
+def regular_polygon(sides, width, start_angle):
+    points = [
+        (math.cos(start_angle + math.tau * index / sides), math.sin(start_angle + math.tau * index / sides))
+        for index in range(sides)
+    ]
+    xs, ys = zip(*points)
+    scale = width / (max(xs) - min(xs))
+    center_x, center_y = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
+    return [(round((x - center_x) * scale, 6), round((y - center_y) * scale, 6)) for x, y in points]
+
+
+def shape_outline(shape, width):
+    if shape == "circle":
+        return [
+            (
+                round(width / 2 * math.cos(math.tau * index / 256), 6),
+                round(width / 2 * math.sin(math.tau * index / 256), 6),
+            )
+            for index in range(256)
+        ]
+    if shape == "square":
+        return rounded_rectangle(width, width, min(4, width * 0.07))
+    if shape == "rectangle":
+        height = width * 0.72
+        return rounded_rectangle(width, height, min(5, height * 0.1))
+    if shape == "pentagon":
+        return regular_polygon(5, width, math.pi / 2)
+    return regular_polygon(6, width, 0)
+
+
+def outline_dimensions(outline):
+    xs, ys = zip(*outline)
+    return round(max(xs) - min(xs), 6), round(max(ys) - min(ys), 6)
+
+
+def module_size_for_shape(shape, width, modules):
+    outline = shape_outline(shape, width)
+    qr_half = math.inf
+    for index, (ax, ay) in enumerate(outline):
+        bx, by = outline[(index + 1) % len(outline)]
+        dx, dy = bx - ax, by - ay
+        length = math.hypot(dx, dy)
+        distance = abs(dx * ay - dy * ax) / length
+        square_projection = (abs(dx) + abs(dy)) / length
+        qr_half = min(qr_half, (distance - 1) / square_projection)
+    return max(0, 2 * qr_half / (modules + 8))
+
+
+def minimum_shape_width(shape, modules, minimum_module):
+    low, high = 25.0, 200.0
+    if module_size_for_shape(shape, high, modules) < minimum_module:
+        return math.inf
+    for _ in range(48):
+        middle = (low + high) / 2
+        if module_size_for_shape(shape, middle, modules) >= minimum_module:
+            high = middle
+        else:
+            low = middle
+    return math.ceil(high - 1e-7)
+
+
 @dataclass
 class Token:
     url: str
+    shape: str
+    outline: list
+    shape_width: float
+    shape_height: float
     diameter: float
     minimum_diameter: float
     base: float
@@ -70,11 +156,15 @@ class Token:
     @property
     def filename(self):
         host = re.sub(r"[^a-zA-Z0-9.-]", "-", urlsplit(self.url).hostname or "token")[:48]
-        return f"qr-{host}-{sha256(self.url.encode()).hexdigest()[:8]}"
+        return f"qr-{self.shape}-{self.treatment}-{host}-{sha256(self.url.encode()).hexdigest()[:8]}"
 
     def info(self):
         return {
             "url": self.url,
+            "shape": self.shape,
+            "outline": self.outline,
+            "shape_width": self.shape_width,
+            "shape_height": self.shape_height,
             "diameter": self.diameter,
             "minimum_diameter": self.minimum_diameter,
             "base": self.base,
@@ -105,14 +195,11 @@ class Token:
         """Top view of the selected raised or inset treatment."""
         img = Image.new("RGB", (size, size), "#E7E8E5")
         draw = ImageDraw.Draw(img)
-        scale = (size - 32) / self.diameter
+        scale = (size - 32) / max(self.shape_width, self.shape_height)
         center = size / 2
-        r = self.diameter * scale / 2
         inset = self.treatment == "inset"
-        draw.ellipse(
-            (center - r, center - r, center + r, center + r),
-            fill=self.qr_color if inset else self.base_color,
-        )
+        fill = self.qr_color if inset else self.base_color
+        draw.polygon([(center + x * scale, center - y * scale) for x, y in self.outline], fill=fill)
         pitch = self.module * scale
         left = center - len(self.matrix) * pitch / 2
         for row, cells in enumerate(self.matrix):
@@ -133,7 +220,8 @@ class Token:
 
     def mesh(self):
         """Union row runs into the base, avoiding overlapping STL shells."""
-        base_solid = manifold.Manifold.cylinder(self.base, self.diameter / 2, circular_segments=256)
+        token_section = manifold.CrossSection([self.outline])
+        base_solid = token_section.extrude(self.base)
         outlines = []
         n = len(self.matrix)
         offset = n * self.module / 2
@@ -165,11 +253,7 @@ class Token:
                 outlines.append([(round(x + u, 6), round(y + v, 6)) for u, v in outline])
         # Union in 2D first so shared row boundaries use a common coordinate grid.
         qr_section = manifold.CrossSection(outlines)
-        printable_section = (
-            manifold.CrossSection.circle(self.diameter / 2, circular_segments=256) - qr_section
-            if self.treatment == "inset"
-            else qr_section
-        )
+        printable_section = token_section - qr_section if self.treatment == "inset" else qr_section
         relief = printable_section.extrude(self.relief + overlap).translate((0, 0, self.base - overlap))
         solid = base_solid + relief
         if solid.status() != manifold.Error.NoError:
@@ -202,6 +286,9 @@ def create_token(data, nozzle=0.4, filament_count=2):
         raise InputError("Enter a valid HTTP or HTTPS URL.") from error
     if not valid or re.search(r'[<>"{}|\\^`]', url):
         raise InputError("Enter a valid HTTP or HTTPS URL without credentials.")
+    shape = data.get("shape", "circle")
+    if shape not in TOKEN_SHAPES:
+        raise InputError("Token shape is not supported.")
     requested_diameter = number(data, "diameter", 60, 25, 200)
     layer = number(data, "layer_height", 0.2, 0.08, min(0.3, nozzle * 0.75))
     first = number(data, "first_layer", 0.2, 0.08, min(0.3, nozzle * 0.75))
@@ -229,19 +316,21 @@ def create_token(data, nozzle=0.4, filament_count=2):
     except qrcode.exceptions.DataOverflowError as error:
         raise InputError("This URL is too long for a QR code.") from error
     matrix = qr.get_matrix()
-    # The entire QR plus four-module border fits inside a circle with 1 mm edge clearance.
+    # The entire QR plus four-module quiet zone fits with 1 mm edge clearance.
     min_module = max(0.6, nozzle * 2)
-    minimum_diameter = math.ceil(math.sqrt(2) * (len(matrix) + 8) * min_module + 2)
+    minimum_diameter = minimum_shape_width(shape, len(matrix), min_module)
     if minimum_diameter > 200:
         raise InputError(
-            f"This URL needs a token over 200 mm across for a {nozzle:g} mm nozzle. Shorten the URL."
+            f"This URL needs a {shape} token over 200 mm wide for a {nozzle:g} mm nozzle. Shorten the URL."
         )
     diameter = max(requested_diameter, minimum_diameter)
     if diameter > requested_diameter:
         warnings.append(
-            f"Diameter increased to {minimum_diameter:g} mm so every QR module is printable with a {nozzle:g} mm nozzle."
+            f"Width increased to {minimum_diameter:g} mm so every QR module is printable with a {nozzle:g} mm nozzle."
         )
-    module = (diameter - 2) / (math.sqrt(2) * (len(matrix) + 8))
+    outline = shape_outline(shape, diameter)
+    shape_width, shape_height = outline_dimensions(outline)
+    module = module_size_for_shape(shape, diameter, len(matrix))
     if module < 1.2:
         warnings.append(
             f"QR modules are {module:.2f} mm wide. Print a scan test; 1.2 mm or larger is more forgiving."
@@ -264,6 +353,10 @@ def create_token(data, nozzle=0.4, filament_count=2):
         raise InputError("Base and QR must use different project filaments.")
     token = Token(
         url,
+        shape,
+        outline,
+        shape_width,
+        shape_height,
         diameter,
         minimum_diameter,
         base,

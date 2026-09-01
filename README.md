@@ -1,6 +1,7 @@
 # QR Token Studio
 
-QR Token Studio is a free browser-based generator for raised or inset circular QR tokens with an automatic Bambu Studio AMS filament change.
+QR Token Studio is a free browser-based generator for raised or inset QR tokens with an automatic Bambu Studio AMS filament change.
+Choose a circle, softened square, landscape rectangle, pentagon, or hexagon.
 Enter a URL, set the dimensions, and download a Bambu project `.3mf`, watertight `.stl`, or QR preview `.png` directly from the web app.
 The entered URL, imported profile, and generated geometry stay in the browser and are never uploaded.
 
@@ -9,8 +10,8 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 ## Use the web app
 
 1. Enter the destination URL.
-2. Choose raised or inset treatment, token diameter, base thickness, and feature depth.
-   The diameter slider starts at the minimum printable size for the current URL and nozzle.
+2. Choose the token shape, raised or inset treatment, overall width, base thickness, and feature depth.
+   The size slider starts at the shape-specific minimum printable width for the current URL and nozzle.
 3. Download **Bambu 3MF**.
 4. Open it **as a project** in Bambu Studio so its settings and layer event are retained.
 5. Slice and confirm the preview shows one filament change and a dark QR against a light surface.
@@ -55,8 +56,8 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 
 ## Geometry and print safeguards
 
-- Four quiet-zone modules on every side fit inside the circle with another 1 mm of radial edge clearance.
-- The diameter is clamped to the minimum that keeps every QR module printable with the selected nozzle.
+- Four quiet-zone modules on every side fit inside every shape with another 1 mm of edge clearance.
+- The overall width is clamped to the shape-specific minimum that keeps every QR module printable with the selected nozzle.
 - Token detail view uses a low camera angle and true depth to make raised or recessed geometry visible.
 - Bed scale view shows the token at real scale on the selected profile’s print bed.
 - The generated preview uses a high-contrast dark QR and light surface.
@@ -69,7 +70,7 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 
 Preview colors are illustrative.
 Use opaque, contrasting filaments of the same material and verify an actual print with the phones that will scan it.
-Shorter URLs give larger QR modules at the same token diameter.
+Shorter URLs give larger QR modules at the same token width.
 
 ## Local static development
 
@@ -94,7 +95,7 @@ It is useful for batch generation and cross-checking the browser implementation.
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe server.py --url https://example.com --treatment inset --diameter 60 --base 1 --relief 1 --output generated
+.venv\Scripts\python.exe server.py --url https://example.com --shape hexagon --treatment inset --diameter 60 --base 1 --relief 1 --output generated
 ```
 
 Omit the generation arguments to run the Flask workspace at <http://127.0.0.1:8765/>.
@@ -113,7 +114,7 @@ npm run build:web
 .venv\Scripts\python.exe tests\validate_bambu.py --workdir ..\..\work\bambu-validation --report validation\bambu-report.json
 ```
 
-The native integration test checks successful slicing, exactly one filament change, correct filament selection on every model layer, and decoding of the actual sliced QR toolpaths.
+The native integration test checks every supported inset shape for successful slicing, exactly one filament change, correct filament selection on every model layer, and decoding of the actual sliced QR toolpaths.
 Browser-generated raised and inset 3MF projects have also been passed through the installed Bambu Studio CLI and checked for one connected watertight body, one layer change, correct model-layer colors, and decodable sliced QR toolpaths.
 No validation command starts a print job.
 

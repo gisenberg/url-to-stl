@@ -1,7 +1,7 @@
 {
   "unit_tests": {
-    "python_passed": 38,
-    "browser_core_passed": 7,
+    "python_passed": 44,
+    "browser_core_passed": 8,
     "failed": 0
   },
   "lint": "Ruff and JavaScript syntax checks passed",
@@ -16,9 +16,16 @@
       "change_layer": 7,
       "change_z": 1.16
     },
-    "diameter_clamp": {
-      "default_minimum": 40,
-      "dense_url_minimum": 53
+    "size_clamp": {
+      "circle_default_minimum": 40,
+      "dense_url_circle_minimum": 53,
+      "shape_minimum_widths": {
+        "circle": 40,
+        "square": 30,
+        "rectangle": 40,
+        "pentagon": 51,
+        "hexagon": 44
+      }
     },
     "x2d_bed_preview_mm": [256, 256],
     "default_preview": "token_detail_true_depth",
@@ -30,6 +37,13 @@
     "inset_base_color": "#181818",
     "inset_top_color": "#F5F0E5",
     "minimum_inset_top_layers": 5,
+    "native_bambu_inset_shapes": [
+      "circle",
+      "square",
+      "rectangle",
+      "pentagon",
+      "hexagon"
+    ],
     "lighthouse_scores": {
       "accessibility": 100,
       "best_practices": 100,
@@ -39,13 +53,16 @@
     "only_same_origin_static_requests": true,
     "browser_generated_3mf": {
       "treatment": "inset",
+      "shape": "pentagon",
+      "shape_width": 60,
+      "shape_height": 57.06339,
       "base_color": "#181818",
       "top_color": "#F5F0E5",
       "light_top_layers": 5,
-      "triangles": 7224,
+      "triangles": 4674,
       "watertight": true,
-      "connected_faces": 7224,
-      "volume_mm3": 5153.902,
+      "connected_faces": 4674,
+      "volume_mm3": 4434.166,
       "native_bambu_slice": "Success",
       "filament_changes": 1,
       "change_layer": 6,

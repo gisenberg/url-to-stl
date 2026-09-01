@@ -3,8 +3,8 @@ import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
 
 export class InputError extends Error {}
 
-const SQRT2 = Math.sqrt(2);
 const encoder = new TextEncoder();
+const TOKEN_SHAPES = new Set(['circle', 'square', 'rectangle', 'pentagon', 'hexagon']);
 
 function number(data, key, fallback, minimum, maximum) {
   const raw = data[key] === undefined || data[key] === '' ? fallback : data[key];
@@ -58,11 +58,91 @@ function round(value, digits = 6) {
   return Number(value.toFixed(digits));
 }
 
+function roundedRectangle(width, height, radius, segments = 8) {
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const corners = [
+    [halfWidth - radius, halfHeight - radius, 0],
+    [-halfWidth + radius, halfHeight - radius, Math.PI / 2],
+    [-halfWidth + radius, -halfHeight + radius, Math.PI],
+    [halfWidth - radius, -halfHeight + radius, Math.PI * 1.5],
+  ];
+  return corners.flatMap(([cx, cy, start]) => Array.from({ length: segments + 1 }, (_, index) => {
+    const angle = start + Math.PI / 2 * index / segments;
+    return [round(cx + radius * Math.cos(angle)), round(cy + radius * Math.sin(angle))];
+  }));
+}
+
+function regularPolygon(sides, width, startAngle) {
+  const points = Array.from({ length: sides }, (_, index) => {
+    const angle = startAngle + Math.PI * 2 * index / sides;
+    return [Math.cos(angle), Math.sin(angle)];
+  });
+  const xs = points.map(point => point[0]);
+  const ys = points.map(point => point[1]);
+  const scale = width / (Math.max(...xs) - Math.min(...xs));
+  const centerX = (Math.max(...xs) + Math.min(...xs)) / 2;
+  const centerY = (Math.max(...ys) + Math.min(...ys)) / 2;
+  return points.map(([x, y]) => [round((x - centerX) * scale), round((y - centerY) * scale)]);
+}
+
+function shapeOutline(shape, width) {
+  if (shape === 'circle') {
+    return Array.from({ length: 256 }, (_, index) => {
+      const angle = Math.PI * 2 * index / 256;
+      return [round(width / 2 * Math.cos(angle)), round(width / 2 * Math.sin(angle))];
+    });
+  }
+  if (shape === 'square') return roundedRectangle(width, width, Math.min(4, width * .07));
+  if (shape === 'rectangle') {
+    const height = width * .72;
+    return roundedRectangle(width, height, Math.min(5, height * .1));
+  }
+  if (shape === 'pentagon') return regularPolygon(5, width, Math.PI / 2);
+  return regularPolygon(6, width, 0);
+}
+
+function outlineDimensions(outline) {
+  const xs = outline.map(point => point[0]);
+  const ys = outline.map(point => point[1]);
+  return { width: round(Math.max(...xs) - Math.min(...xs)), height: round(Math.max(...ys) - Math.min(...ys)) };
+}
+
+function moduleSizeForShape(shape, width, modules) {
+  const outline = shapeOutline(shape, width);
+  let qrHalf = Infinity;
+  for (let index = 0; index < outline.length; index++) {
+    const [ax, ay] = outline[index];
+    const [bx, by] = outline[(index + 1) % outline.length];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const length = Math.hypot(dx, dy);
+    const distance = Math.abs(dx * ay - dy * ax) / length;
+    const squareProjection = (Math.abs(dx) + Math.abs(dy)) / length;
+    qrHalf = Math.min(qrHalf, (distance - 1) / squareProjection);
+  }
+  return Math.max(0, 2 * qrHalf / (modules + 8));
+}
+
+function minimumShapeWidth(shape, modules, minimumModule) {
+  let low = 25;
+  let high = 200;
+  if (moduleSizeForShape(shape, high, modules) < minimumModule) return Infinity;
+  for (let iteration = 0; iteration < 48; iteration++) {
+    const middle = (low + high) / 2;
+    if (moduleSizeForShape(shape, middle, modules) >= minimumModule) high = middle;
+    else low = middle;
+  }
+  return Math.ceil(high - 1e-7);
+}
+
 export function createToken(data, profile) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new InputError('Expected token settings.');
   if (!profile) throw new InputError('The printer profile has not loaded yet.');
   const url = normalizeUrl(data.url || '');
   const nozzle = profile.nozzle;
+  const shape = data.shape || 'circle';
+  if (!TOKEN_SHAPES.has(shape)) throw new InputError('Token shape is not supported.');
   const requestedDiameter = number(data, 'diameter', 60, 25, 200);
   const maximumLayer = Math.min(0.3, nozzle * 0.75);
   const layerHeight = number(data, 'layer_height', 0.2, 0.08, maximumLayer);
@@ -93,18 +173,20 @@ export function createToken(data, profile) {
   const matrix = Array.from({ length: modules }, (_, row) =>
     Array.from({ length: modules }, (_, column) => Boolean(qr.modules.get(row, column))));
   const minimumModule = Math.max(0.6, nozzle * 2);
-  const minimumDiameter = Math.ceil(SQRT2 * (modules + 8) * minimumModule + 2);
+  const minimumDiameter = minimumShapeWidth(shape, modules, minimumModule);
   if (minimumDiameter > 200) {
-    throw new InputError(`This URL needs a token over 200 mm across for a ${formatNumber(nozzle)} mm nozzle. Shorten the URL.`);
+    throw new InputError(`This URL needs a ${shape} token over 200 mm wide for a ${formatNumber(nozzle)} mm nozzle. Shorten the URL.`);
   }
   const diameter = Math.max(requestedDiameter, minimumDiameter);
   if (diameter > profile.max_diameter) {
-    throw new InputError(`This QR needs a ${formatNumber(diameter)} mm token, but this bed allows ${formatNumber(profile.max_diameter)} mm with prime-tower clearance. Shorten the URL.`);
+    throw new InputError(`This QR needs a ${formatNumber(diameter)} mm wide token, but this bed allows ${formatNumber(profile.max_diameter)} mm with prime-tower clearance. Shorten the URL.`);
   }
   if (diameter > requestedDiameter) {
-    warnings.push(`Diameter increased to ${formatNumber(minimumDiameter)} mm so every QR module is printable with a ${formatNumber(nozzle)} mm nozzle.`);
+    warnings.push(`Width increased to ${formatNumber(minimumDiameter)} mm so every QR module is printable with a ${formatNumber(nozzle)} mm nozzle.`);
   }
-  const moduleSize = (diameter - 2) / (SQRT2 * (modules + 8));
+  const outline = shapeOutline(shape, diameter);
+  const dimensions = outlineDimensions(outline);
+  const moduleSize = moduleSizeForShape(shape, diameter, modules);
   if (moduleSize < 1.2) warnings.push(`QR modules are ${moduleSize.toFixed(2)} mm wide. Print a scan test; 1.2 mm or larger is more forgiving.`);
   const baseColor = color(data, 'base_color', treatment === 'inset' ? '#181818' : '#F5F0E5');
   const qrColor = color(data, 'qr_color', treatment === 'inset' ? '#F5F0E5' : '#181818');
@@ -123,6 +205,10 @@ export function createToken(data, profile) {
   if (filaments[0] === filaments[1]) throw new InputError('Base and QR must use different project filaments.');
   return {
     url,
+    shape,
+    outline,
+    shape_width: dimensions.width,
+    shape_height: dimensions.height,
     diameter,
     minimum_diameter: minimumDiameter,
     base,
@@ -226,8 +312,9 @@ export function profileInfo(template, name = 'Bambu project') {
 }
 
 export function buildMesh(module, token) {
-  const { Manifold, CrossSection } = module;
-  const base = Manifold.cylinder(token.base, token.diameter / 2, -1, 256);
+  const { CrossSection } = module;
+  const tokenSection = new CrossSection([token.outline]);
+  const base = tokenSection.extrude(token.base);
   const outlines = [];
   const offset = token.modules * token.module_size / 2;
   for (let row = 0; row < token.modules; row++) {
@@ -254,10 +341,8 @@ export function buildMesh(module, token) {
   const overlap = Math.min(0.02, token.first_layer / 4);
   const crossSection = new CrossSection(outlines);
   let printableSection = crossSection;
-  let circle;
   if (token.treatment === 'inset') {
-    circle = CrossSection.circle(token.diameter / 2, 256);
-    printableSection = circle.subtract(crossSection);
+    printableSection = tokenSection.subtract(crossSection);
   }
   const relief = printableSection.extrude(token.relief + overlap).translate([0, 0, token.base - overlap]);
   const solid = base.add(relief);
@@ -275,9 +360,9 @@ export function buildMesh(module, token) {
     solid.delete();
     relief.delete();
     if (printableSection !== crossSection) printableSection.delete();
-    circle?.delete();
     crossSection.delete();
     base.delete();
+    tokenSection.delete();
   }
 }
 
@@ -382,23 +467,24 @@ export async function tokenFilename(token) {
   const host = new URL(token.url).hostname.replace(/[^a-z0-9.-]/gi, '-').slice(0, 48) || 'token';
   const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(token.url)));
   const suffix = [...hash.slice(0, 4)].map(value => value.toString(16).padStart(2, '0')).join('');
-  return `qr-${host}-${suffix}`;
+  return `qr-${token.shape}-${token.treatment}-${host}-${suffix}`;
 }
 
 export function encodeBambu3mf(template, profile, token, mesh, filename, pngBytes) {
-  if (token.diameter > profile.max_diameter) throw new InputError(`Token is too large for this bed with prime-tower clearance. Maximum diameter: ${formatNumber(profile.max_diameter)} mm.`);
+  if (token.diameter > profile.max_diameter) throw new InputError(`Token is too large for this bed with prime-tower clearance. Maximum width: ${formatNumber(profile.max_diameter)} mm.`);
   const [centerX, centerY] = bedGeometry(template).center;
   const triangleCount = mesh.triangles.length / 3;
   const settings = preparedSettings(template, token);
   const date = new Date().toISOString().slice(0, 10);
-  const partName = token.treatment === 'inset' ? 'Base and inset QR field' : 'Base and raised QR';
-  const rootModel = `<?xml version="1.0" encoding="utf-8"?><model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" unit="millimeter" requiredextensions="p"><metadata name="Application">${xmlEscape(template.application)}</metadata><metadata name="BambuStudio:3mfVersion">1</metadata><metadata name="Title">${xmlEscape(filename)}</metadata><metadata name="CreationDate">${date}</metadata><metadata name="Description">QR Token Studio ${token.treatment} treatment. Change before layer ${token.change_layer}, top Z ${formatNumber(token.change_z)} mm.</metadata><resources><object id="2" type="model"><components><component objectid="1" p:path="/3D/Objects/object_1.model" transform="1 0 0 0 1 0 0 0 1 0 0 0"/></components></object></resources><build><item objectid="2" printable="1" transform="1 0 0 0 1 0 0 0 1 ${formatNumber(centerX)} ${formatNumber(centerY)} 0"/></build></model>`;
+  const partName = `${label(token.shape)} base and ${token.treatment === 'inset' ? 'inset QR field' : 'raised QR'}`;
+  const rootModel = `<?xml version="1.0" encoding="utf-8"?><model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" unit="millimeter" requiredextensions="p"><metadata name="Application">${xmlEscape(template.application)}</metadata><metadata name="BambuStudio:3mfVersion">1</metadata><metadata name="Title">${xmlEscape(filename)}</metadata><metadata name="CreationDate">${date}</metadata><metadata name="Description">QR Token Studio ${token.shape} ${token.treatment} treatment. Change before layer ${token.change_layer}, top Z ${formatNumber(token.change_z)} mm.</metadata><resources><object id="2" type="model"><components><component objectid="1" p:path="/3D/Objects/object_1.model" transform="1 0 0 0 1 0 0 0 1 0 0 0"/></components></object></resources><build><item objectid="2" printable="1" transform="1 0 0 0 1 0 0 0 1 ${formatNumber(centerX)} ${formatNumber(centerY)} 0"/></build></model>`;
   const modelSettings = `<?xml version="1.0" encoding="utf-8"?><config><object id="2">${metadata('name', filename)}${metadata('extruder', token.base_filament)}<metadata face_count="${triangleCount}"/><part id="1" subtype="normal_part">${metadata('name', partName)}${metadata('matrix', '1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1')}<mesh_stat face_count="${triangleCount}" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/></part></object><plate>${metadata('plater_id', 1)}${metadata('plater_name', 'QR Token')}${metadata('locked', 'false')}${metadata('filament_map_mode', 'Manual')}${metadata('gcode_file', '')}${metadata('thumbnail_file', 'Metadata/plate_1.png')}<model_instance>${metadata('object_id', 2)}${metadata('instance_id', 0)}${metadata('identify_id', 1)}</model_instance></plate><assemble/></config>`;
   const events = `<?xml version="1.0" encoding="utf-8"?><custom_gcodes_per_layer><plate><plate_info id="1"/><layer top_z="${formatNumber(token.change_z)}" type="2" extruder="${token.qr_filament}" color="${token.qr_color}" extra="" gcode="tool_change"/><mode value="MultiAsSingle"/></plate></custom_gcodes_per_layer>`;
   const relationships = target => `<?xml version="1.0" encoding="utf-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="${target}" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>`;
   const contentTypes = '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="config" ContentType="application/octet-stream"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="json" ContentType="application/json"/></Types>';
   const report = { ...token, profile, mesh: { watertight: true, triangles: triangleCount, volume_mm3: round(mesh.volume, 3) } };
   delete report.matrix;
+  delete report.outline;
   const entries = {
     '[Content_Types].xml': strToU8(contentTypes),
     '_rels/.rels': strToU8(relationships('/3D/3dmodel.model')),

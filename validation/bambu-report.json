@@ -23,6 +23,46 @@
       "correct_filament_on_every_model_layer": true
     },
     {
+      "case": "inset-square",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "inset-rectangle",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "inset-pentagon",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "inset-hexagon",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
       "case": "different-first-layer",
       "bambu_result": "Success",
       "filament_changes": 1,

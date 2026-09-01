@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Create circular QR tokens and Bambu Studio 3MF projects with an automatic AMS filament change.">
+  <meta name="description" content="Create shaped QR tokens and Bambu Studio 3MF projects with an automatic AMS filament change.">
   <title>QR Token Studio</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/style.css">
@@ -16,7 +16,7 @@
   </header>
   <main>
     <section class="intro">
-      <div><p class="eyebrow">A LINK YOU CAN HOLD</p><h1>Small token.<br>One automatic swap.</h1><p class="lede">Turn a URL into a circular QR token.<br>Your Bambu project arrives with the AMS layer change built in.</p></div>
+      <div><p class="eyebrow">A LINK YOU CAN HOLD</p><h1>Small token.<br>One automatic swap.</h1><p class="lede">Turn a URL into a shaped QR token.<br>Your Bambu project arrives with the AMS layer change built in.</p></div>
       <div class="intro-note"><span class="mini-token">▦</span><p>Made for the physical world.<br><strong>Generated entirely on your computer.</strong></p></div>
     </section>
     <div class="workspace">
@@ -28,7 +28,10 @@
           <p class="field-note">Encoded directly. No redirects, accounts, or expiration.</p>
           <div class="divider"></div>
           <div class="section-heading"><span class="step">02</span><h2>The token</h2><span class="tag">MILLIMETERS</span></div>
-          <div class="diameter-label"><label for="diameter">Diameter</label><output id="diameter-display" for="diameter">60 <small>mm</small></output></div>
+          <label for="shape">Token shape</label>
+          <select id="shape" name="shape"><option value="circle" selected>Circle · classic coin</option><option value="square">Square · softened corners</option><option value="rectangle">Rectangle · landscape badge</option><option value="pentagon">Pentagon · distinctive marker</option><option value="hexagon">Hexagon · durable tile</option></select>
+          <p id="shape-note" class="field-note">The classic round token with the most even edge clearance.</p>
+          <div class="diameter-label"><label id="size-label" for="diameter">Diameter</label><output id="diameter-display" for="diameter">60 <small>mm</small></output></div>
           <input id="diameter" name="diameter" type="range" min="40" max="196" step="1" value="60">
           <div class="range-labels"><span id="diameter-min">40 mm minimum</span><span id="diameter-max">196 mm maximum</span></div>
           <label for="treatment">QR treatment</label>

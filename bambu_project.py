@@ -154,7 +154,7 @@ def export_project(template, token, mesh):
     geometry = bed_geometry(template)
     if token.diameter > geometry["max_diameter"]:
         raise InputError(
-            f"Token is too large for this bed with prime-tower clearance. Maximum diameter: {geometry['max_diameter']:g} mm."
+            f"Token is too large for this bed with prime-tower clearance. Maximum width: {geometry['max_diameter']:g} mm."
         )
     cx, cy = geometry["center"]
     settings = prepare_settings(template, token)
@@ -167,7 +167,7 @@ def export_project(template, token, mesh):
         ("CreationDate", datetime.now(timezone.utc).date().isoformat()),
         (
             "Description",
-            f"QR Token Studio {token.treatment} treatment. Change before layer {token.base_layers + 1}, top Z {token.change_z:g} mm.",
+            f"QR Token Studio {token.shape} {token.treatment} treatment. Change before layer {token.base_layers + 1}, top Z {token.change_z:g} mm.",
         ),
     ]:
         ET.SubElement(root, f"{{{CORE}}}metadata", name=name).text = value
@@ -211,7 +211,8 @@ def export_project(template, token, mesh):
     meta(obj, "extruder", token.base_filament)
     ET.SubElement(obj, "metadata", face_count=str(len(mesh.faces)))
     part = ET.SubElement(obj, "part", id="1", subtype="normal_part")
-    meta(part, "name", "Base and raised QR" if token.treatment == "raised" else "Base and inset QR field")
+    feature = "raised QR" if token.treatment == "raised" else "inset QR field"
+    meta(part, "name", f"{token.shape.title()} base and {feature}")
     meta(part, "matrix", "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1")
     ET.SubElement(
         part,
@@ -276,6 +277,7 @@ def export_project(template, token, mesh):
         ET.SubElement(types, "Default", Extension=ext, ContentType=typ)
     report = token.info()
     report.pop("matrix")
+    report.pop("outline")
     report["profile"] = profile_info(template)
     report["mesh"] = {"watertight": True, "triangles": len(mesh.faces), "volume_mm3": round(mesh.volume, 3)}
     contents = {

@@ -43,7 +43,7 @@ test('creates the default token with exact layer boundaries', () => {
 test('clamps the token to the QR-specific printable minimum', () => {
   const small = createToken({ url: 'https://example.com', diameter: 25 }, parsed.profile);
   assert.equal(small.diameter, 40);
-  assert.match(small.warnings[0], /Diameter increased to 40 mm/);
+  assert.match(small.warnings[0], /Width increased to 40 mm/);
   const dense = createToken({
     url: 'https://www.google.com/maps/place/Space+Needle/@47.6205,-122.3493,17z',
     diameter: 40,
@@ -57,6 +57,7 @@ test('rejects invalid URLs, dimensions, colors, and filament assignments', () =>
     { url: 'javascript:alert(1)' },
     { url: 'https://user:secret@example.com' },
     { url: 'https://example.com', diameter: Number.NaN },
+    { url: 'https://example.com', shape: 'triangle' },
     { url: 'https://example.com', base_color: '#000000', qr_color: '#FFFFFF' },
     { url: 'https://example.com', base_filament: 1, qr_filament: 1 },
   ]) assert.throws(() => createToken(input, parsed.profile), InputError);
@@ -94,12 +95,31 @@ test('builds an inset QR as one recessed watertight solid', () => {
   assert.deepEqual(mesh.bounds.max.map(value => Math.round(value)), [30, 30, 2]);
 });
 
+test('builds every supported token shape as printable watertight geometry', () => {
+  const shapes = new Map([
+    ['circle', 40], ['square', 30], ['rectangle', 40], ['pentagon', 51], ['hexagon', 44],
+  ]);
+  for (const [shape, minimumWidth] of shapes) {
+    const token = createToken({
+      url: 'https://example.com', shape, treatment: 'inset', diameter: 25,
+    }, parsed.profile);
+    const mesh = buildMesh(manifold, token);
+    assert.equal(token.shape, shape);
+    assert.equal(token.minimum_diameter, minimumWidth);
+    assert.equal(token.diameter, minimumWidth);
+    assert.ok(token.module_size >= 0.8);
+    assert.ok(token.shape_height <= token.shape_width + 1e-5);
+    assert.ok(mesh.triangles.length > 0);
+    assert.ok(mesh.volume > 0);
+  }
+});
+
 test('packages the native Bambu settings and exactly one layer tool change', async () => {
   const token = createToken({ url: 'https://example.com' }, parsed.profile);
   token.scan_verified = true;
   const mesh = buildMesh(manifold, token);
   const filename = await tokenFilename(token);
-  assert.equal(filename, 'qr-example.com-100680ad');
+  assert.equal(filename, 'qr-circle-raised-example.com-100680ad');
   const project = encodeBambu3mf(parsed.template, parsed.profile, token, mesh, filename, new Uint8Array([1, 2, 3]));
   const contents = inspect3mf(project);
   assert.ok(contents.names.includes('3D/Objects/object_1.model'));

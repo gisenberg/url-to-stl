@@ -132,7 +132,7 @@ def export(kind):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="QR Token Studio: local circular QR tokens with Bambu AMS layer changes."
+        description="QR Token Studio: shaped QR tokens with Bambu AMS layer changes."
     )
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
@@ -140,6 +140,9 @@ def main():
     parser.add_argument("--output", type=Path, default=Path.cwd() / "generated")
     parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
     parser.add_argument("--diameter", type=float, default=60)
+    parser.add_argument(
+        "--shape", choices=("circle", "square", "rectangle", "pentagon", "hexagon"), default="circle"
+    )
     parser.add_argument("--base", type=float, default=1)
     parser.add_argument("--relief", type=float, default=1)
     parser.add_argument("--treatment", choices=("raised", "inset"), default="raised")
@@ -163,6 +166,7 @@ def main():
             print(dest)
         report = token.info()
         report.pop("matrix")
+        report.pop("outline")
         (output / (token.filename + ".json")).write_text(json.dumps(report, indent=2), encoding="utf-8")
         return
     address = f"http://127.0.0.1:{args.port}"
