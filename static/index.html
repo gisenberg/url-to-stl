@@ -15,10 +15,6 @@
     <span class="local"><i></i> LOCAL WORKSPACE <span class="version">/ 01</span></span>
   </header>
   <main>
-    <section class="intro">
-      <div><p class="eyebrow">A LINK YOU CAN HOLD</p><h1>Small token.<br>One automatic swap.</h1><p class="lede">Turn a URL into a shaped QR token.<br>Your Bambu project arrives with the AMS layer change built in.</p></div>
-      <div class="intro-note"><span class="mini-token">▦</span><p>Made for the physical world.<br><strong>Generated entirely on your computer.</strong></p></div>
-    </section>
     <div class="workspace">
       <section class="controls card" aria-label="Token settings">
         <form id="settings" novalidate>
@@ -28,18 +24,26 @@
           <p class="field-note">Encoded directly. No redirects, accounts, or expiration.</p>
           <div class="divider"></div>
           <div class="section-heading"><span class="step">02</span><h2>The token</h2><span class="tag">MILLIMETERS</span></div>
+          <label for="preset">Preset</label>
+          <select id="preset" name="preset"><option value="custom" selected>Custom token</option><option value="business-card">Business card · 85.6 × 54 mm</option></select>
+          <p id="preset-note" class="field-note">Set the shape and dimensions independently.</p>
+          <div id="business-options" hidden><label for="icon">Brand icon</label><select id="icon" name="icon"><option value="none" selected>No icon</option><option value="instagram">Instagram</option><option value="x">X</option><option value="facebook">Facebook</option><option value="linkedin">LinkedIn</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option></select><p class="field-note">The icon prints with the QR contrast color in the left panel.</p></div>
           <label for="shape">Token shape</label>
           <select id="shape" name="shape"><option value="circle" selected>Circle · classic coin</option><option value="square">Square · compact tile</option><option value="rectangle">Rectangle · landscape badge</option><option value="pentagon">Pentagon · distinctive marker</option><option value="hexagon">Hexagon · durable tile</option></select>
           <p id="shape-note" class="field-note">The classic round token with the most even edge clearance.</p>
+          <div id="corner-row"><label for="corner_style">Corner treatment</label><select id="corner_style" name="corner_style"><option value="default" selected>Shape default</option><option value="sharp">Sharp</option><option value="softened">Softened</option><option value="rounded">Rounded</option></select></div>
           <div class="field-grid">
-            <div><label for="corner_style">Corner treatment</label><select id="corner_style" name="corner_style"><option value="default" selected>Shape default</option><option value="sharp">Sharp</option><option value="softened">Softened</option><option value="rounded">Rounded</option></select></div>
-            <div><label for="edge_profile">Edge treatment</label><select id="edge_profile" name="edge_profile"><option value="straight" selected>Straight wall</option><option value="chamfered">Chamfered foot</option><option value="rounded">Rounded foot</option><option value="inset">Stepped inset</option><option value="tapered">Angled inward</option></select></div>
+            <div><label for="edge_profile">Lower edge</label><select id="edge_profile" name="edge_profile"><option value="straight" selected>Straight wall</option><option value="chamfered">Chamfered foot</option><option value="rounded">Rounded foot</option><option value="inset">Stepped inset</option><option value="tapered">Angled inward</option></select></div>
+            <div><label for="top_profile">Top edge</label><select id="top_profile" name="top_profile"><option value="straight" selected>Straight wall</option><option value="chamfered">Chamfered crown</option><option value="rounded">Rounded crown</option><option value="inset">Stepped inset</option><option value="tapered">Angled inward</option></select></div>
           </div>
-          <div id="edge-size-row"><label for="edge_size">Edge depth</label><div class="unit-input compact-unit"><input id="edge_size" name="edge_size" type="number" min="0.4" max="2" step="0.2" value="0.8" disabled><span>mm</span></div></div>
-          <p id="edge-note" class="field-note">A clean vertical perimeter with no lower-edge shaping.</p>
+          <div class="field-grid edge-depths">
+            <div id="edge-size-row"><label for="edge_size">Lower depth</label><div class="unit-input"><input id="edge_size" name="edge_size" type="number" min="0.4" max="2" step="0.2" value="0.8" disabled><span>mm</span></div><p id="edge-note" class="field-note">The lower perimeter remains vertical.</p></div>
+            <div id="top-size-row"><label for="top_size">Top depth</label><div class="unit-input"><input id="top_size" name="top_size" type="number" min="0.4" max="2" step="0.2" value="0.8" disabled><span>mm</span></div><p id="top-note" class="field-note">The top perimeter remains vertical.</p></div>
+          </div>
           <div class="diameter-label"><label id="size-label" for="diameter">Diameter</label><output id="diameter-display" for="diameter">60 <small>mm</small></output></div>
-          <input id="diameter" name="diameter" type="range" min="40" max="196" step="1" value="60">
+          <input id="diameter" name="diameter" type="range" min="40" max="196" step="0.1" value="60">
           <div class="range-labels"><span id="diameter-min">40 mm minimum</span><span id="diameter-max">196 mm maximum</span></div>
+          <div id="height-row" hidden><div class="diameter-label"><label for="shape_height">Height</label><output id="height-display" for="shape_height">43.2 <small>mm</small></output></div><input id="shape_height" name="shape_height" type="range" min="30" max="196" step="0.1" value="43.2"><div class="range-labels"><span id="height-min">30 mm minimum</span><span id="height-max">196 mm maximum</span></div></div>
           <label for="treatment">QR treatment</label>
           <select id="treatment" name="treatment"><option value="inset" selected>Inset · dark code recessed into a light top</option><option value="raised">Raised · dark code above a light base</option></select>
           <p id="treatment-note" class="field-note">The dark base shows through the QR openings. After one AMS swap, at least five light layers form an opaque top field.</p>
@@ -94,7 +98,7 @@
         </div>
       </section>
     </div>
-    <footer><span>QR TOKEN STUDIO</span><p>No cloud. No tracking. No printer connection.</p><span>DESIGN → SLICE → SCAN</span></footer>
+    <footer><span>QR TOKEN STUDIO</span><p>No uploads. No tracking. No printer connection.</p></footer>
   </main>
 </body>
 </html>

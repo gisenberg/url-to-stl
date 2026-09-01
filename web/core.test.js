@@ -5,6 +5,7 @@ import ManifoldModule from 'manifold-3d';
 import {
   InputError,
   buildMesh,
+  buildPreviewParts,
   createToken,
   encodeBambu3mf,
   encodeBinaryStl,
@@ -100,7 +101,7 @@ test('builds an inset QR as one recessed watertight solid', () => {
 
 test('builds every supported token shape as printable watertight geometry', () => {
   const shapes = new Map([
-    ['circle', 40], ['square', 30], ['rectangle', 40], ['pentagon', 51], ['hexagon', 44],
+    ['circle', 40], ['square', 30], ['rectangle', 30], ['pentagon', 51], ['hexagon', 44],
   ]);
   for (const [shape, minimumWidth] of shapes) {
     const token = createToken({
@@ -114,6 +115,56 @@ test('builds every supported token shape as printable watertight geometry', () =
     assert.ok(token.shape_height <= token.shape_width + 1e-5);
     assert.ok(mesh.triangles.length > 0);
     assert.ok(mesh.volume > 0);
+  }
+});
+
+test('rectangle width and height are independent and QR-safe', () => {
+  const token = createToken({
+    url: 'https://example.com', shape: 'rectangle', diameter: 92, shape_height: 38, treatment: 'inset',
+  }, parsed.profile);
+  assert.equal(token.shape_width, 92);
+  assert.equal(token.shape_height, 38);
+  assert.equal(token.minimum_diameter, 30);
+  assert.equal(token.minimum_height, 30);
+  assert.ok(token.module_size >= .8);
+  assert.ok(buildMesh(manifold, token).volume > 0);
+});
+
+test('business-card preset right-aligns the QR and supports printable social icons', () => {
+  for (const icon of ['none', 'instagram', 'x', 'facebook', 'linkedin', 'youtube', 'tiktok']) {
+    const token = createToken({ url: 'https://example.com', preset: 'business-card', icon, treatment: 'inset' }, parsed.profile);
+    assert.equal(token.shape, 'rectangle');
+    assert.equal(token.shape_width, 85.6);
+    assert.equal(token.shape_height, 54);
+    assert.ok(token.qr_offset_x > 0);
+    assert.equal(token.icon, icon);
+    if (icon === 'none') assert.equal(token.icon_size, 0);
+    else {
+      assert.equal(token.icon_size, 18);
+      assert.ok(token.icon_center_x < 0);
+      assert.ok(token.icon_outlines.length > 0);
+    }
+    const mesh = buildMesh(manifold, token);
+    assert.ok(mesh.triangles.length > 0);
+    assert.ok(mesh.volume > 0);
+  }
+});
+
+test('every top-edge profile produces matching printable and preview geometry', () => {
+  for (const top_profile of ['straight', 'chamfered', 'rounded', 'inset', 'tapered']) {
+    const token = createToken({
+      url: 'https://example.com', shape: 'rectangle', shape_height: 45,
+      top_profile, top_size: .8, treatment: 'inset',
+    }, parsed.profile);
+    assert.equal(token.top_profile, top_profile);
+    assert.deepEqual(token.top_slices[0], [0, 0]);
+    assert.equal(token.top_slices.at(-1)[0], token.relief);
+    assert.equal(token.top_slices.at(-1)[1], top_profile === 'straight' ? 0 : .8);
+    const mesh = buildMesh(manifold, token);
+    const preview = buildPreviewParts(manifold, token);
+    assert.ok(mesh.triangles.length > 0);
+    assert.ok(preview.base.triangles.length > 0);
+    assert.ok(preview.top.triangles.length > 0);
   }
 });
 

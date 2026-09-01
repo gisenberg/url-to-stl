@@ -80,10 +80,10 @@ def resolve_input():
         if template is None:
             raise InputError("Template expired. Import it again.")
     token = create_token(data, template["nozzle"], template["filament_count"])
-    maximum = profile_info(template)["max_diameter"]
-    if token.diameter > maximum:
+    profile = profile_info(template)
+    if token.shape_width > profile["max_width"] or token.shape_height > profile["max_height"]:
         raise InputError(
-            f"This URL needs a token larger than the {maximum:g} mm maximum for this print bed. Shorten the URL."
+            f"This token exceeds the {profile['max_width']:g} × {profile['max_height']:g} mm maximum for this print bed."
         )
     return data, template, token
 
@@ -140,6 +140,8 @@ def main():
     parser.add_argument("--output", type=Path, default=Path.cwd() / "generated")
     parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
     parser.add_argument("--diameter", type=float, default=60)
+    parser.add_argument("--shape-height", type=float, default=43.2)
+    parser.add_argument("--preset", choices=("custom", "business-card"), default="custom")
     parser.add_argument(
         "--shape", choices=("circle", "square", "rectangle", "pentagon", "hexagon"), default="circle"
     )
@@ -150,6 +152,13 @@ def main():
         "--edge-profile", choices=("straight", "chamfered", "rounded", "inset", "tapered"), default="straight"
     )
     parser.add_argument("--edge-size", type=float, default=0.8)
+    parser.add_argument(
+        "--top-profile", choices=("straight", "chamfered", "rounded", "inset", "tapered"), default="straight"
+    )
+    parser.add_argument("--top-size", type=float, default=0.8)
+    parser.add_argument(
+        "--icon", choices=("none", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"), default="none"
+    )
     parser.add_argument("--base", type=float, default=1)
     parser.add_argument("--relief", type=float, default=1)
     parser.add_argument("--treatment", choices=("raised", "inset"), default="raised")

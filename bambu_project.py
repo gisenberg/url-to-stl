@@ -73,6 +73,8 @@ def bed_geometry(template):
         "depth": depth,
         "center": (center_x, center_y),
         "points": [[round(x - center_x, 6), round(y - center_y, 6)] for x, y in points],
+        "max_width": max(0, width - 60),
+        "max_height": max(0, depth - 60),
         "max_diameter": max(0, min(width, depth) - 60),
     }
 
@@ -91,6 +93,8 @@ def profile_info(template, name="Bambu project"):
         "bed_width": geometry["width"],
         "bed_depth": geometry["depth"],
         "bed_points": geometry["points"],
+        "max_width": geometry["max_width"],
+        "max_height": geometry["max_height"],
         "max_diameter": geometry["max_diameter"],
         "application": template["application"],
     }
@@ -152,9 +156,10 @@ def prepare_settings(template, token):
 
 def export_project(template, token, mesh):
     geometry = bed_geometry(template)
-    if token.diameter > geometry["max_diameter"]:
+    if token.shape_width > geometry["max_width"] or token.shape_height > geometry["max_height"]:
         raise InputError(
-            f"Token is too large for this bed with prime-tower clearance. Maximum width: {geometry['max_diameter']:g} mm."
+            "Token is too large for this bed with prime-tower clearance. "
+            f"Maximum size: {geometry['max_width']:g} × {geometry['max_height']:g} mm."
         )
     cx, cy = geometry["center"]
     settings = prepare_settings(template, token)
@@ -167,7 +172,9 @@ def export_project(template, token, mesh):
         ("CreationDate", datetime.now(timezone.utc).date().isoformat()),
         (
             "Description",
-            f"QR Token Studio {token.shape} with {token.corner_style} corners and a {token.edge_profile} edge. {token.treatment.title()} QR treatment; change before layer {token.base_layers + 1}, top Z {token.change_z:g} mm.",
+            f"QR Token Studio {token.shape} with {token.corner_style} corners, a {token.edge_profile} lower edge, "
+            f"and a {token.top_profile} top edge. {token.treatment.title()} QR treatment; "
+            f"change before layer {token.base_layers + 1}, top Z {token.change_z:g} mm.",
         ),
     ]:
         ET.SubElement(root, f"{{{CORE}}}metadata", name=name).text = value
@@ -212,7 +219,11 @@ def export_project(template, token, mesh):
     ET.SubElement(obj, "metadata", face_count=str(len(mesh.faces)))
     part = ET.SubElement(obj, "part", id="1", subtype="normal_part")
     feature = "raised QR" if token.treatment == "raised" else "inset QR field"
-    meta(part, "name", f"{token.shape.title()} with {token.edge_profile} edge and {feature}")
+    meta(
+        part,
+        "name",
+        f"{token.shape.title()} with {token.edge_profile} lower edge, {token.top_profile} top edge, and {feature}",
+    )
     meta(part, "matrix", "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1")
     ET.SubElement(
         part,

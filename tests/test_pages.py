@@ -10,7 +10,10 @@ def test_pages_build_is_the_generator_without_server_routes():
         html = (output / "index.html").read_text(encoding="utf-8")
         app = (output / "app.js").read_text(encoding="utf-8")
         assert "BROWSER WORKSPACE" in html
-        assert "Generated entirely in your browser." in html
+        assert "A LINK YOU CAN HOLD" not in html
+        assert "Small token." not in html
+        assert "Business card" in html
+        assert "Brand icon" in html
         assert "Download Bambu 3MF" in html
         assert "Download for Windows" not in html
         assert "/api/" not in app

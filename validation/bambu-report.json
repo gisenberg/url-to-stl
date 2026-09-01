@@ -103,6 +103,26 @@
       "correct_filament_on_every_model_layer": true
     },
     {
+      "case": "rounded-top-edge",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "business-card-instagram",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
       "case": "different-first-layer",
       "bambu_result": "Success",
       "filament_changes": 1,

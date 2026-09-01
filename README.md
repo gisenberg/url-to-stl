@@ -1,7 +1,8 @@
 # QR Token Studio
 
 QR Token Studio is a free browser-based generator for raised or inset QR tokens with an automatic Bambu Studio AMS filament change.
-Choose a circle, softened square, landscape rectangle, pentagon, or hexagon.
+Choose a circle, square, independently sized rectangle, pentagon, or hexagon.
+The business-card preset creates an 85.6 × 54 mm card with a right-aligned QR and an optional Instagram, X, Facebook, LinkedIn, YouTube, or TikTok icon.
 Enter a URL, set the dimensions, and download a Bambu project `.3mf`, watertight `.stl`, or QR preview `.png` directly from the web app.
 The entered URL, imported profile, and generated geometry stay in the browser and are never uploaded.
 
@@ -10,7 +11,8 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 ## Use the web app
 
 1. Enter the destination URL.
-2. Choose the token shape, corner treatment, edge treatment, raised or inset QR treatment, overall width, base thickness, and feature depth.
+2. Choose the preset or token shape, dimensions, corner treatment, lower and top edge treatments, raised or inset QR treatment, base thickness, and feature depth.
+   Rectangles have independent width and height controls.
    The size slider starts at the shape-specific minimum printable width for the current URL and nozzle.
 3. Download **Bambu 3MF**.
    Use the arrow segment on the download button when you need geometry-only STL instead.
@@ -60,8 +62,9 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 - Four quiet-zone modules on every side fit inside every shape with another 1 mm of edge clearance.
 - The overall width is clamped to the shape-specific minimum that keeps every QR module printable with the selected nozzle.
 - Corner treatments include shape default, sharp, softened, and rounded.
-- Edge treatments include a straight wall, chamfered foot, rounded foot, stepped inset, and a full-height taper angled inward toward the build plate.
-- Edge shaping stays within the base layers so it does not change the QR surface or AMS transition.
+- Lower-edge treatments include a straight wall, chamfered foot, rounded foot, stepped inset, and a taper angled inward from the build plate.
+- Top-edge treatments provide the inverse controls at the upper perimeter: straight, chamfered, rounded, stepped inset, or angled inward.
+- QR sizing accounts for the narrowest treated top perimeter so the quiet zone retains its clearance.
 - Token detail view uses a low camera angle and true depth to make raised or recessed geometry visible.
 - Bed scale view shows the token at real scale on the selected profile’s print bed.
 - The generated preview uses a high-contrast dark QR and light surface.
@@ -99,7 +102,7 @@ It is useful for batch generation and cross-checking the browser implementation.
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe server.py --url https://example.com --shape hexagon --corner-style rounded --edge-profile chamfered --edge-size 0.8 --treatment inset --diameter 60 --base 1 --relief 1 --output generated
+.venv\Scripts\python.exe server.py --url https://example.com --shape rectangle --diameter 92 --shape-height 50 --corner-style rounded --edge-profile chamfered --top-profile rounded --treatment inset --base 1 --relief 1 --output generated
 ```
 
 Omit the generation arguments to run the Flask workspace at <http://127.0.0.1:8765/>.
@@ -118,7 +121,7 @@ npm run build:web
 .venv\Scripts\python.exe tests\validate_bambu.py --workdir ..\..\work\bambu-validation --report validation\bambu-report.json
 ```
 
-The native integration test checks every supported inset shape and edge treatment for successful slicing, exactly one filament change, correct filament selection on every model layer, and decoding of the actual sliced QR toolpaths.
+The native integration test checks every supported inset shape and lower-edge treatment, plus a rounded top edge and an Instagram business card, for successful slicing, exactly one filament change, correct filament selection on every model layer, and decoding of the actual sliced QR toolpaths.
 Browser-generated raised and inset 3MF projects have also been passed through the installed Bambu Studio CLI and checked for one connected watertight body, one layer change, correct model-layer colors, and decodable sliced QR toolpaths.
 No validation command starts a print job.
 

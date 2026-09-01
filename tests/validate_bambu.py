@@ -118,6 +118,14 @@ def main():
         ("rounded-edge", {"treatment": "inset", "shape": "square", "edge_profile": "rounded"}),
         ("stepped-inset-edge", {"treatment": "inset", "shape": "hexagon", "edge_profile": "inset"}),
         ("tapered-edge", {"treatment": "inset", "shape": "rectangle", "edge_profile": "tapered"}),
+        (
+            "rounded-top-edge",
+            {"treatment": "inset", "shape": "rectangle", "shape_height": 45, "top_profile": "rounded"},
+        ),
+        (
+            "business-card-instagram",
+            {"treatment": "inset", "preset": "business-card", "icon": "instagram"},
+        ),
         ("different-first-layer", {"layer_height": 0.16}),
         ("reversed-filaments", {"base_filament": 2, "qr_filament": 1}),
     ]

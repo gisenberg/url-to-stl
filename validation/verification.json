@@ -1,7 +1,7 @@
 {
   "unit_tests": {
-    "python_passed": 68,
-    "browser_core_passed": 10,
+    "python_passed": 92,
+    "browser_core_passed": 13,
     "failed": 0
   },
   "lint": "Ruff and JavaScript syntax checks passed",
@@ -31,12 +31,15 @@
       "shape_minimum_widths": {
         "circle": 40,
         "square": 30,
-        "rectangle": 40,
+        "rectangle": 30,
         "pentagon": 51,
         "hexagon": 44
       }
     },
-    "x2d_bed_preview_mm": [256, 256],
+    "x2d_bed_preview_mm": [
+      256,
+      256
+    ],
     "default_preview": "token_detail_true_depth",
     "bed_scale_preview": true,
     "default_base_mm": 1,
@@ -75,26 +78,57 @@
     "only_same_origin_static_requests": true,
     "browser_generated_3mf": {
       "treatment": "inset",
-      "shape": "square",
-      "shape_width": 60,
-      "shape_height": 60,
+      "preset": "business-card",
+      "shape": "rectangle",
+      "shape_width": 85.6,
+      "shape_height": 54,
       "corner_style": "rounded",
-      "edge_profile": "tapered",
-      "edge_size": 0.8,
+      "edge_profile": "straight",
+      "top_profile": "rounded",
+      "top_size": 0.8,
+      "icon": "instagram",
+      "qr_alignment": "right",
+      "qr_offset_x": 15.8,
       "base_color": "#181818",
       "top_color": "#F5F0E5",
       "light_top_layers": 5,
-      "triangles": 4890,
+      "triangles": 10756,
       "watertight": true,
-      "connected_faces": 4890,
-      "volume_mm3": 6120.507,
+      "volume_mm3": 8376.445,
       "native_bambu_slice": "Success",
       "filament_changes": 1,
       "change_layer": 6,
       "change_z": 1.2,
       "correct_filament_on_every_model_layer": true,
       "sliced_toolpaths_decode": "https://example.com"
-    }
+    },
+    "business_card_preset": {
+      "dimensions_mm": [
+        85.6,
+        54
+      ],
+      "qr_alignment": "right",
+      "icons": [
+        "none",
+        "instagram",
+        "x",
+        "facebook",
+        "linkedin",
+        "youtube",
+        "tiktok"
+      ],
+      "browser_3mf_download_verified": true,
+      "native_bambu_slice_verified": true
+    },
+    "independent_rectangle_dimensions": true,
+    "top_edge_profiles": [
+      "straight",
+      "chamfered",
+      "rounded",
+      "inset",
+      "tapered"
+    ],
+    "native_bambu_case_count": 14
   },
   "physical_print_tested": false
 }

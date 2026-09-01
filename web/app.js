@@ -3,6 +3,7 @@ import ManifoldModule from 'manifold-3d';
 import jsQR from 'jsqr';
 import {
   buildMesh,
+  buildPreviewParts,
   createToken,
   encodeBambu3mf,
   encodeBinaryStl,
@@ -51,18 +52,31 @@ function setDownloadMenu(open, focus = false) {
 function values() {
   return Object.fromEntries(new FormData(form));
 }
+function measurement(value) {
+  return Number(value).toFixed(1).replace(/\.0$/, '');
+}
 function updateFields() {
-  $('diameter-display').innerHTML = `${Number($('diameter').value)} <small>mm</small>`;
+  $('diameter-display').innerHTML = `${measurement($('diameter').value)} <small>mm</small>`;
+  $('height-display').innerHTML = `${measurement($('shape_height').value)} <small>mm</small>`;
+  const businessCard = $('preset').value === 'business-card';
   const shape = $('shape').value;
   $('size-label').textContent = shape === 'circle' ? 'Diameter' : 'Width';
+  $('business-options').hidden = !businessCard;
+  $('preset-note').textContent = businessCard
+    ? 'Standard 85.6 × 54 mm card with a right-aligned QR and optional icon panel.'
+    : 'Set the shape and dimensions independently.';
+  $('shape').disabled = businessCard;
+  $('diameter').disabled = businessCard;
+  $('shape_height').disabled = businessCard;
+  $('height-row').hidden = shape !== 'rectangle';
   $('shape-note').textContent = {
     circle: 'The classic round token with the most even edge clearance.',
     square: 'A compact tile that uses the available area efficiently.',
-    rectangle: 'A landscape badge with extra room beside the QR field.',
+    rectangle: businessCard ? 'The QR quiet zone is aligned to the right edge.' : 'A rectangle with independent width and height.',
     pentagon: 'A directional marker whose top point is easy to orient.',
     hexagon: 'A durable tile that packs and sorts neatly.',
   }[shape];
-  $('corner_style').disabled = shape === 'circle';
+  $('corner_style').disabled = shape === 'circle' || businessCard;
   const edgeProfile = $('edge_profile').value;
   $('edge_size').disabled = edgeProfile === 'straight';
   $('edge-note').textContent = {
@@ -72,6 +86,15 @@ function updateFields() {
     inset: 'A crisp recessed foot creates a shadow line around the token.',
     tapered: 'The wall angles inward toward the build plate across the full base thickness.',
   }[edgeProfile];
+  const topProfile = $('top_profile').value;
+  $('top_size').disabled = topProfile === 'straight';
+  $('top-note').textContent = {
+    straight: 'The top perimeter remains vertical.',
+    chamfered: 'A flat bevel removes the sharp top edge.',
+    rounded: 'A segmented radius softens the top edge.',
+    inset: 'A short shoulder steps the top surface inward.',
+    tapered: 'The upper wall angles inward toward the top surface.',
+  }[topProfile];
   const inset = $('treatment').value === 'inset';
   $('relief').min = String(inset ? Math.max(.24, Number($('layer_height').value) * 5) : .24);
   $('relief-label').textContent = inset ? 'Light cover thickness' : 'Raised QR';
@@ -82,16 +105,22 @@ function updateFields() {
 }
 function applyDiameterLimits(next) {
   const control = $('diameter');
-  const minimum = Math.ceil(next.minimum_diameter);
-  const maximum = Math.floor(profile?.max_diameter || 200);
+  const minimum = next.preset === 'business-card' ? next.minimum_diameter : Math.ceil(next.minimum_diameter);
+  const maximum = Math.floor(profile?.max_width || profile?.max_diameter || 200);
   control.min = String(minimum);
   control.max = String(maximum);
-  if (Number(control.value) < minimum || Number(control.value) !== next.diameter) {
-    control.value = String(next.diameter);
-  }
+  control.value = String(next.diameter);
+  const heightControl = $('shape_height');
+  const minimumHeight = next.preset === 'business-card' ? next.minimum_height : Math.ceil(next.minimum_height);
+  const maximumHeight = Math.floor(profile?.max_height || profile?.max_diameter || 200);
+  heightControl.min = String(minimumHeight);
+  heightControl.max = String(maximumHeight);
+  heightControl.value = String(next.shape_height);
   $('relief').value = String(next.relief);
-  $('diameter-min').textContent = `${minimum} mm minimum`;
+  $('diameter-min').textContent = `${measurement(minimum)} mm minimum`;
   $('diameter-max').textContent = `${maximum} mm maximum`;
+  $('height-min').textContent = `${measurement(minimumHeight)} mm minimum`;
+  $('height-max').textContent = `${maximumHeight} mm maximum`;
   updateFields();
 }
 function invalidate() {
@@ -138,7 +167,8 @@ async function refresh() {
       { inversionAttempts: 'dontInvert' });
     if (!scan || scan.data !== token.url) throw new Error('The preview failed its independent QR scan check. Increase size or contrast.');
     token.scan_verified = true;
-    updateModel();
+    await updateModel(token, current);
+    if (current !== generation) return;
     $('preview-status').hidden = true;
     canvas.style.opacity = '1';
     $('scan-canvas').style.opacity = '1';
@@ -173,13 +203,24 @@ function drawScan() {
   });
   ctx.closePath(); ctx.fill();
   const pitch = token.module_size * scale;
-  const start = 450 - token.modules * pitch / 2;
+  const half = token.modules * token.module_size / 2;
+  const startX = 450 + (token.qr_offset_x - half) * scale;
+  const startY = 450 - (token.qr_offset_y + half) * scale;
   ctx.fillStyle = inset ? token.base_color : token.qr_color;
   token.matrix.forEach((row, r) => row.forEach((dark, c) => {
-    if (dark) ctx.fillRect(Math.round(start + c*pitch), Math.round(start + r*pitch),
-      Math.round(start+(c+1)*pitch)-Math.round(start+c*pitch),
-      Math.round(start+(r+1)*pitch)-Math.round(start+r*pitch));
+    if (dark) ctx.fillRect(Math.round(startX + c*pitch), Math.round(startY + r*pitch),
+      Math.round(startX+(c+1)*pitch)-Math.round(startX+c*pitch),
+      Math.round(startY+(r+1)*pitch)-Math.round(startY+r*pitch));
   }));
+  for (const outline of token.icon_outlines) {
+    ctx.beginPath();
+    outline.forEach(([x, y], index) => {
+      const px = 450 + x * scale;
+      const py = 450 - y * scale;
+      if (index === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    ctx.closePath(); ctx.fill();
+  }
 }
 function setupScene() {
   try {
@@ -224,7 +265,7 @@ function setupScene() {
   canvas.addEventListener('pointercancel', () => {drag = null;});
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
-    const minimum = viewMode === 'detail' && token ? token.diameter * 1.25 : bedSpan * .75;
+    const minimum = viewMode === 'detail' && token ? Math.max(token.shape_width, token.shape_height) * 1.25 : bedSpan * .75;
     distance = Math.max(minimum, Math.min(bedSpan*3.2, distance * (e.deltaY > 0 ? 1.08 : .92)));
     render();
   }, {passive: false});
@@ -276,79 +317,32 @@ function updateBed() {
   $('bed-reference').textContent = `${profile.printer.replace('Bambu Lab ', '')} BED · ${profile.bed_width} × ${profile.bed_depth} MM`;
   render();
 }
-function updateModel() {
+async function updateModel(nextToken, currentGeneration) {
   if (!renderer) return;
+  const module = await manifoldReady;
+  const parts = buildPreviewParts(module, nextToken);
+  if (currentGeneration !== generation) return;
   disposeGroup(group);
   group = new THREE.Group();
-  const makeTokenShape = () => {
-    const shape = new THREE.Shape();
-    token.outline.forEach(([x, y], index) => {
-      if (index === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
-    });
-    shape.closePath();
-    return shape;
-  };
-  const createBaseGeometry = () => {
-    const points = token.outline.map(([x, y]) => new THREE.Vector2(x, y));
-    const triangles = THREE.ShapeUtils.triangulateShape(points, []);
+  const createGeometry = data => {
     const positions = [];
-    const indices = [];
-    for (const [height, inset] of token.edge_slices) {
-      const scaleX = (token.shape_width - 2 * inset) / token.shape_width;
-      const scaleY = (token.shape_height - 2 * inset) / token.shape_height;
-      token.outline.forEach(([x, y]) => positions.push(x * scaleX, height, -y * scaleY));
-    }
-    const count = token.outline.length;
-    triangles.forEach(([a, b, c]) => {
-      indices.push(c, b, a);
-      const top = (token.edge_slices.length - 1) * count;
-      indices.push(top + a, top + b, top + c);
-    });
-    for (let slice = 0; slice < token.edge_slices.length - 1; slice++) {
-      const lower = slice * count;
-      const upper = (slice + 1) * count;
-      for (let point = 0; point < count; point++) {
-        const next = (point + 1) % count;
-        indices.push(lower + point, lower + next, upper + next, lower + point, upper + next, upper + point);
-      }
+    for (let index = 0; index < data.vertices.length; index += 3) {
+      positions.push(data.vertices[index], data.vertices[index + 2], -data.vertices[index + 1]);
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setIndex(indices);
+    geometry.setIndex(new THREE.BufferAttribute(data.triangles, 1));
     geometry.computeVertexNormals();
     return geometry;
   };
-  const base = new THREE.Mesh(createBaseGeometry(),
-    new THREE.MeshStandardMaterial({color: token.base_color, roughness: .8, metalness: 0}));
+  const base = new THREE.Mesh(createGeometry(parts.base),
+    new THREE.MeshStandardMaterial({color: nextToken.base_color, roughness: .8, metalness: 0}));
   base.castShadow = true; base.receiveShadow = true; group.add(base);
-  const inset = token.treatment === 'inset';
-  const offset = token.modules*token.module_size/2;
-  if (inset) {
-    const topShape = makeTokenShape();
-    const hole = new THREE.Path();
-    hole.moveTo(-offset, -offset); hole.lineTo(-offset, offset);
-    hole.lineTo(offset, offset); hole.lineTo(offset, -offset); hole.closePath();
-    topShape.holes.push(hole);
-    const ring = new THREE.Mesh(new THREE.ExtrudeGeometry(topShape, {depth: token.relief, bevelEnabled: false, curveSegments: 192}),
-      new THREE.MeshStandardMaterial({color: token.qr_color, roughness: .92}));
-    ring.rotation.x = -Math.PI/2; ring.position.y = token.base;
-    ring.castShadow = true; ring.receiveShadow = true; group.add(ring);
-  }
-  const count = token.matrix.flat().filter(value => inset ? !value : value).length;
-  const blocks = new THREE.InstancedMesh(new THREE.BoxGeometry(token.module_size, token.relief, token.module_size),
-    new THREE.MeshStandardMaterial({color: token.qr_color, roughness: .92}), count);
-  const transform = new THREE.Matrix4();
-  let i = 0;
-  token.matrix.forEach((row, r) => row.forEach((dark, c) => {
-    if (inset ? !dark : dark) {
-      transform.makeTranslation((c+.5)*token.module_size-offset,
-        token.base+token.relief/2, (r+.5)*token.module_size-offset);
-      blocks.setMatrixAt(i++, transform);
-    }
-  }));
-  blocks.castShadow = true; blocks.receiveShadow = true; group.add(blocks);
+  const top = new THREE.Mesh(createGeometry(parts.top),
+    new THREE.MeshStandardMaterial({color: nextToken.qr_color, roughness: .92, metalness: 0}));
+  top.castShadow = true; top.receiveShadow = true; group.add(top);
   scene.add(group);
-  distance = viewMode === 'detail' ? Math.max(token.diameter * 1.85, 90) : bedSpan * 1.68;
+  distance = viewMode === 'detail' ? Math.max(Math.max(nextToken.shape_width, nextToken.shape_height) * 1.85, 90) : bedSpan * 1.68;
   updateViewLabels();
   render();
 }
@@ -368,7 +362,7 @@ function switchView(view) {
   viewMode = view;
   if (view === 'detail') {
     azimuth = -.55; elevation = .42;
-    distance = token ? Math.max(token.diameter * 1.85, 90) : 110;
+    distance = token ? Math.max(Math.max(token.shape_width, token.shape_height) * 1.85, 90) : 110;
   } else if (view === 'bed') {
     azimuth = -.2; elevation = 1.03; distance = bedSpan * 1.68;
   }
@@ -385,8 +379,10 @@ function switchView(view) {
 function updateViewLabels() {
   if (!profile || !token || viewMode === 'top') return;
   if (viewMode === 'detail') {
-    const edge = token.edge_profile === 'straight' ? '' : ` · ${token.edge_profile.toUpperCase()} EDGE`;
-    $('bed-reference').textContent = `${token.shape.toUpperCase()} ${token.treatment.toUpperCase()} · ${token.relief} MM ${token.treatment === 'inset' ? 'DEEP' : 'HIGH'}${edge}`;
+    const edges = [token.edge_profile, token.top_profile].filter(profile => profile !== 'straight');
+    const edge = edges.length ? ` · ${edges.map(profile => profile.toUpperCase()).join(' / ')} EDGE` : '';
+    const label = token.preset === 'business-card' ? 'BUSINESS CARD' : token.shape.toUpperCase();
+    $('bed-reference').textContent = `${label} ${token.treatment.toUpperCase()} · ${token.relief} MM ${token.treatment === 'inset' ? 'DEEP' : 'HIGH'}${edge}`;
     $('orbit-hint').textContent = 'TRUE DEPTH · DRAG TO ROTATE · SCROLL TO ZOOM';
   } else {
     $('bed-reference').textContent = `${profile.printer.replace('Bambu Lab ', '')} BED · ${profile.bed_width} × ${profile.bed_depth} MM`;
@@ -402,8 +398,10 @@ function showProfile(next) {
     profile.filaments.forEach((name, i) => select.add(new Option(`Filament ${i+1}`, String(i+1))));
   }
   $('qr_filament').value = '2';
-  $('diameter').max = String(Math.floor(profile.max_diameter));
-  $('diameter-max').textContent = `${Math.floor(profile.max_diameter)} mm maximum`;
+  $('diameter').max = String(Math.floor(profile.max_width || profile.max_diameter));
+  $('diameter-max').textContent = `${Math.floor(profile.max_width || profile.max_diameter)} mm maximum`;
+  $('shape_height').max = String(Math.floor(profile.max_height || profile.max_diameter));
+  $('height-max').textContent = `${Math.floor(profile.max_height || profile.max_diameter)} mm maximum`;
   const maxLayer = Math.min(.3, profile.nozzle*.75);
   for (const id of ['layer_height', 'first_layer']) {
     const select = $(id);
@@ -459,6 +457,19 @@ function saveBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
+$('preset').addEventListener('input', () => {
+  if ($('preset').value === 'business-card') {
+    $('shape').value = 'rectangle';
+    $('corner_style').value = 'rounded';
+    $('diameter').value = '85.6';
+    $('shape_height').value = '54';
+  } else {
+    $('icon').value = 'none';
+    $('diameter').min = '25';
+    $('shape_height').min = '25';
+  }
+  updateFields();
+});
 form.addEventListener('submit', e => {e.preventDefault();});
 form.addEventListener('input', e => {if (e.target.id !== 'template-file') invalidate();});
 $('view-detail').addEventListener('click', () => switchView('detail'));

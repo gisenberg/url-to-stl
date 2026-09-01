@@ -85,7 +85,7 @@ def test_inset_geometry_is_connected_watertight_and_scannable():
 
 @pytest.mark.parametrize(
     "shape,minimum_width",
-    [("circle", 40), ("square", 30), ("rectangle", 40), ("pentagon", 51), ("hexagon", 44)],
+    [("circle", 40), ("square", 30), ("rectangle", 30), ("pentagon", 51), ("hexagon", 44)],
 )
 def test_supported_shapes_are_watertight_scannable_and_printable(shape, minimum_width):
     token = create_token({"url": "https://example.com", "shape": shape, "treatment": "inset", "diameter": 25})
@@ -117,6 +117,70 @@ def test_edge_profiles_are_connected_watertight_and_preserve_the_qr(edge_profile
     assert token.edge_slices[0][0] == 0
     assert token.edge_slices[-1] == (token.base, 0)
     assert token.shape_width == pytest.approx(60)
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+    test_printed_top_geometry_decodes_exact_url(token, mesh)
+
+
+def test_rectangle_width_and_height_are_independent_and_qr_safe():
+    token = create_token(
+        {
+            "url": "https://example.com",
+            "shape": "rectangle",
+            "diameter": 92,
+            "shape_height": 38,
+            "treatment": "inset",
+        }
+    )
+    assert token.shape_width == 92
+    assert token.shape_height == 38
+    assert token.minimum_diameter == token.minimum_height == 30
+    assert token.module >= 0.8
+    mesh = token.mesh()
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+    test_printed_top_geometry_decodes_exact_url(token, mesh)
+
+
+@pytest.mark.parametrize("icon", ["none", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"])
+def test_business_card_preset_right_aligns_qr_and_prints_social_icons(icon):
+    token = create_token(
+        {"url": "https://example.com", "preset": "business-card", "icon": icon, "treatment": "inset"}
+    )
+    assert token.shape == "rectangle"
+    assert token.shape_width == pytest.approx(85.6)
+    assert token.shape_height == 54
+    assert token.qr_offset_x > 0
+    assert token.icon == icon
+    if icon == "none":
+        assert token.icon_size == 0
+    else:
+        assert token.icon_size == 18
+        assert token.icon_center_x < 0
+    mesh = token.mesh()
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+    test_printed_top_geometry_decodes_exact_url(token, mesh)
+
+
+@pytest.mark.parametrize("treatment", ["raised", "inset"])
+@pytest.mark.parametrize("top_profile", ["straight", "chamfered", "rounded", "inset", "tapered"])
+def test_top_edge_profiles_are_watertight_and_preserve_scan(treatment, top_profile):
+    token = create_token(
+        {
+            "url": "https://example.com",
+            "shape": "rectangle",
+            "shape_height": 45,
+            "top_profile": top_profile,
+            "top_size": 0.8,
+            "treatment": treatment,
+        }
+    )
+    assert token.top_profile == top_profile
+    assert token.top_slices[0] == (0, 0)
+    assert token.top_slices[-1][0] == token.relief
+    assert token.top_slices[-1][1] == (0 if top_profile == "straight" else 0.8)
+    mesh = token.mesh()
     assert mesh.is_watertight
     assert mesh.is_winding_consistent
     test_printed_top_geometry_decodes_exact_url(token, mesh)
@@ -280,6 +344,12 @@ def test_different_patterns_survive_stl_welding(url, correction):
         {"corner_style": "scalloped"},
         {"edge_profile": "ogee"},
         {"edge_size": 3},
+        {"top_profile": "ogee"},
+        {"top_size": 3},
+        {"preset": "credit-card"},
+        {"icon": "myspace"},
+        {"icon": "instagram"},
+        {"shape": "rectangle", "shape_height": 10},
     ],
 )
 def test_rejects_unscannable_colors_and_bad_filament_assignments(data):
