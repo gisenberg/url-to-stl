@@ -13,6 +13,7 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 2. Choose the token shape, corner treatment, edge treatment, raised or inset QR treatment, overall width, base thickness, and feature depth.
    The size slider starts at the shape-specific minimum printable width for the current URL and nozzle.
 3. Download **Bambu 3MF**.
+   Use the arrow segment on the download button when you need geometry-only STL instead.
 4. Open it **as a project** in Bambu Studio so its settings and layer event are retained.
 5. Slice and confirm the preview shows one filament change and a dark QR against a light surface.
 6. Map the two project filaments to the desired physical AMS slots in the print dialog.

@@ -12,7 +12,9 @@ import {
 
 const $ = id => document.getElementById(id);
 const form = $('settings');
-const buttons = [$('download-3mf'), $('download-stl'), $('download-png')];
+const buttons = [
+  $('download-3mf'), $('download-menu-toggle'), $('download-3mf-menu'), $('download-stl'), $('download-png'),
+];
 let template, defaultTemplateBytes, profile, token, valid = false, exporting = false;
 let generation = 0, timer;
 const canvas = $('token-canvas');
@@ -36,6 +38,15 @@ function notice(text, type = '') {
 function enableDownloads(enabled) {
   valid = enabled;
   for (const b of buttons) b.disabled = !enabled || exporting;
+  if (!enabled) setDownloadMenu(false);
+}
+function setDownloadMenu(open, focus = false) {
+  const toggle = $('download-menu-toggle');
+  const menu = $('download-menu');
+  const show = Boolean(open && !toggle.disabled);
+  menu.hidden = !show;
+  toggle.setAttribute('aria-expanded', String(show));
+  if (show && focus) $('download-3mf-menu').focus();
 }
 function values() {
   return Object.fromEntries(new FormData(form));
@@ -403,6 +414,7 @@ function showProfile(next) {
 }
 async function download(kind) {
   if (!valid || exporting) return;
+  setDownloadMenu(false);
   exporting = true; buttons.forEach(b => {b.disabled = true;});
   $('download-3mf').firstElementChild.textContent = kind === 'png' ? 'Preparing preview…' : 'Building watertight geometry…';
   try {
@@ -452,7 +464,29 @@ form.addEventListener('input', e => {if (e.target.id !== 'template-file') invali
 $('view-detail').addEventListener('click', () => switchView('detail'));
 $('view-3d').addEventListener('click', () => switchView('bed'));
 $('view-top').addEventListener('click', () => switchView('top'));
-for (const kind of ['3mf', 'stl', 'png']) $(`download-${kind}`).addEventListener('click', () => download(kind));
+$('download-3mf').addEventListener('click', () => download('3mf'));
+$('download-3mf-menu').addEventListener('click', () => download('3mf'));
+$('download-stl').addEventListener('click', () => download('stl'));
+$('download-png').addEventListener('click', () => download('png'));
+$('download-menu-toggle').addEventListener('click', event => {
+  event.stopPropagation();
+  const open = $('download-menu').hidden;
+  setDownloadMenu(open, open);
+});
+$('download-menu-toggle').addEventListener('keydown', event => {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    setDownloadMenu(true, true);
+  }
+});
+$('download-menu').addEventListener('click', event => event.stopPropagation());
+document.addEventListener('click', () => setDownloadMenu(false));
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !$('download-menu').hidden) {
+    setDownloadMenu(false);
+    $('download-menu-toggle').focus();
+  }
+});
 $('template-file').addEventListener('change', async () => {
   const file = $('template-file').files[0];
   if (!file) return;

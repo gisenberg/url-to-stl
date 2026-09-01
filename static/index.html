@@ -80,7 +80,18 @@
           <p id="swap-description">Print the light base, switch filament, then print the dark QR.</p>
         </div>
         <div id="messages" aria-live="polite"></div>
-        <div class="export-area"><button type="button" id="download-3mf" class="primary" disabled><span>Download Bambu 3MF</span><span aria-hidden="true">↓</span></button><div class="secondary-actions"><button type="button" id="download-stl" disabled>STL geometry</button><span>·</span><button type="button" id="download-png" disabled>QR preview PNG</button></div><p class="export-note">Open as a <strong>project</strong>, slice, and check the preview.<br>The 3MF includes the filament change. STL contains geometry only.</p></div>
+        <div class="export-area">
+          <div id="download-split" class="download-split">
+            <button type="button" id="download-3mf" class="primary primary-main" disabled><span>Download Bambu 3MF</span></button>
+            <button type="button" id="download-menu-toggle" class="primary primary-toggle" aria-label="Choose download format" aria-haspopup="menu" aria-expanded="false" disabled><span aria-hidden="true">▾</span></button>
+            <div id="download-menu" class="download-menu" role="menu" hidden>
+              <button type="button" id="download-3mf-menu" role="menuitem" disabled><span><strong>Bambu 3MF</strong><small>Project with AMS layer change</small></span><b aria-hidden="true">3MF</b></button>
+              <button type="button" id="download-stl" role="menuitem" disabled><span><strong>STL geometry</strong><small>Printable model without project settings</small></span><b aria-hidden="true">STL</b></button>
+            </div>
+          </div>
+          <div class="secondary-actions"><button type="button" id="download-png" disabled>QR preview PNG</button></div>
+          <p class="export-note">Open the 3MF as a <strong>project</strong>, slice, and check the preview.<br>Use the arrow for STL geometry without the filament change.</p>
+        </div>
       </section>
     </div>
     <footer><span>QR TOKEN STUDIO</span><p>No cloud. No tracking. No printer connection.</p><span>DESIGN → SLICE → SCAN</span></footer>

@@ -12,6 +12,15 @@
     "compact_width": 504,
     "horizontal_overflow": false,
     "download_3mf_verified": true,
+    "split_download_button": true,
+    "download_menu_keyboard_dismissal": true,
+    "stl_menu_download_verified": true,
+    "browser_generated_stl": {
+      "triangles": 6438,
+      "watertight": true,
+      "winding_consistent": true,
+      "volume_mm3": 5153.904
+    },
     "unequal_first_layer": {
       "change_layer": 7,
       "change_z": 1.16
