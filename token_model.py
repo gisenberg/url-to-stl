@@ -176,7 +176,10 @@ def minimum_shape_width(shape, modules, minimum_module, corner_style="default", 
         return math.inf
     for _ in range(48):
         middle = (low + high) / 2
-        if module_size_for_shape(shape, middle, middle, modules, corner_style, perimeter_inset) >= minimum_module:
+        if (
+            module_size_for_shape(shape, middle, middle, modules, corner_style, perimeter_inset)
+            >= minimum_module
+        ):
             high = middle
         else:
             low = middle
@@ -280,7 +283,9 @@ def icon_outlines(icon, center_x, center_y, size):
     outlines = []
 
     def add_rect(x, y, width, height):
-        outlines.append(rectangle_outline(center_x + x * size, center_y + y * size, width * size, height * size))
+        outlines.append(
+            rectangle_outline(center_x + x * size, center_y + y * size, width * size, height * size)
+        )
 
     def add_circle(x, y, radius):
         outlines.append(circle_outline(center_x + x * size, center_y + y * size, radius * size))
@@ -295,10 +300,22 @@ def icon_outlines(icon, center_x, center_y, size):
             a, b = math.tau * step / 16, math.tau * (step + 1) / 16
             outlines.append(
                 [
-                    (round(center_x + 0.24 * math.cos(a) * size, 6), round(center_y + 0.24 * math.sin(a) * size, 6)),
-                    (round(center_x + 0.24 * math.cos(b) * size, 6), round(center_y + 0.24 * math.sin(b) * size, 6)),
-                    (round(center_x + 0.14 * math.cos(b) * size, 6), round(center_y + 0.14 * math.sin(b) * size, 6)),
-                    (round(center_x + 0.14 * math.cos(a) * size, 6), round(center_y + 0.14 * math.sin(a) * size, 6)),
+                    (
+                        round(center_x + 0.24 * math.cos(a) * size, 6),
+                        round(center_y + 0.24 * math.sin(a) * size, 6),
+                    ),
+                    (
+                        round(center_x + 0.24 * math.cos(b) * size, 6),
+                        round(center_y + 0.24 * math.sin(b) * size, 6),
+                    ),
+                    (
+                        round(center_x + 0.14 * math.cos(b) * size, 6),
+                        round(center_y + 0.14 * math.sin(b) * size, 6),
+                    ),
+                    (
+                        round(center_x + 0.14 * math.cos(a) * size, 6),
+                        round(center_y + 0.14 * math.sin(a) * size, 6),
+                    ),
                 ]
             )
         add_circle(0.25, 0.25, 0.055)
@@ -656,7 +673,9 @@ def create_token(data, nozzle=0.4, filament_count=2):
         diameter = requested_diameter
         shape_height = requested_shape_height
     elif shape == "rectangle":
-        minimum_side = minimum_shape_width("rectangle", len(matrix), min_module, corner_style, perimeter_inset)
+        minimum_side = minimum_shape_width(
+            "rectangle", len(matrix), min_module, corner_style, perimeter_inset
+        )
         minimum_diameter = minimum_height = minimum_side
         diameter = max(requested_diameter, minimum_diameter)
         shape_height = max(requested_shape_height, minimum_height)
@@ -665,10 +684,14 @@ def create_token(data, nozzle=0.4, filament_count=2):
                 f"Width increased to {minimum_diameter:g} mm so every QR module is printable with a {nozzle:g} mm nozzle."
             )
         if shape_height > requested_shape_height:
-            warnings.append(f"Height increased to {minimum_height:g} mm so the QR quiet zone remains printable.")
+            warnings.append(
+                f"Height increased to {minimum_height:g} mm so the QR quiet zone remains printable."
+            )
     else:
         minimum_diameter = minimum_shape_width(shape, len(matrix), min_module, corner_style, perimeter_inset)
-        minimum_height = outline_dimensions(shape_outline(shape, minimum_diameter, minimum_diameter, corner_style))[1]
+        minimum_height = outline_dimensions(
+            shape_outline(shape, minimum_diameter, minimum_diameter, corner_style)
+        )[1]
         diameter = max(requested_diameter, minimum_diameter)
         shape_height = diameter
         if diameter > requested_diameter:
@@ -676,7 +699,9 @@ def create_token(data, nozzle=0.4, filament_count=2):
                 f"Width increased to {minimum_diameter:g} mm so every QR module is printable with a {nozzle:g} mm nozzle."
             )
     if minimum_diameter > 200 or minimum_height > 200:
-        raise InputError(f"This URL needs a larger {shape} token than the supported 200 mm limit. Shorten the URL.")
+        raise InputError(
+            f"This URL needs a larger {shape} token than the supported 200 mm limit. Shorten the URL."
+        )
     outline = shape_outline(shape, diameter, shape_height, corner_style)
     shape_width, shape_height = outline_dimensions(outline)
     usable_outline = inset_outline(outline, shape_width, shape_height, perimeter_inset)

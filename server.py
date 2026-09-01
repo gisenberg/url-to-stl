@@ -157,7 +157,9 @@ def main():
     )
     parser.add_argument("--top-size", type=float, default=0.8)
     parser.add_argument(
-        "--icon", choices=("none", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"), default="none"
+        "--icon",
+        choices=("none", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"),
+        default="none",
     )
     parser.add_argument("--base", type=float, default=1)
     parser.add_argument("--relief", type=float, default=1)
