@@ -3,7 +3,7 @@
 QR Token Studio is a free browser-based generator for raised, inset, flat, or two-piece QR tokens with Bambu Studio AMS assignments.
 Choose a circle, square, independently sized rectangle, pentagon, or hexagon.
 The business-card preset creates an 85.6 × 54 mm card with a right-aligned QR and an optional Instagram, X, Facebook, LinkedIn, YouTube, or TikTok icon.
-QR styling includes classic blocks, rounded tiles, dots, faceted tiles, square, rounded, or circular finder eyes, and protected center badges.
+QR styling includes classic blocks, rounded tiles, dots, faceted tiles, independently selected finder frames and centers, and protected center badges.
 Enter a URL, set the dimensions, and download a Bambu project `.3mf`, watertight `.stl`, or QR preview `.png` directly from the web app.
 The entered URL, imported profile, and generated geometry stay in the browser and are never uploaded.
 
@@ -12,10 +12,11 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 ## Use the web app
 
 1. Enter the destination URL.
-2. Choose the preset or token shape, dimensions, corner treatment, lower and top edge treatments, raised, inset, or flat QR treatment, base thickness, and feature depth.
+2. Choose the preset or token shape, dimensions, corner treatment, border padding, lower and top edge treatments, raised, inset, or flat QR treatment, base thickness, and feature depth.
    Rectangles have independent width and height controls.
-   Choose a QR module style, finder-eye style, and optional center badge.
-   Center badges reserve a bounded light area and lock classic modules, square finder eyes, and High error correction because that combination survives native slicing.
+   Exact corner radii and physical border padding can be entered in millimeters or inches.
+   Choose a QR module style, finder-frame style, finder-center style, and optional center badge.
+   Center badges reserve a bounded light area and lock classic modules, square finder frames and centers, and High error correction because that combination survives native slicing.
    The size slider starts at the shape-specific minimum printable width for the current URL and nozzle.
 3. Download **Bambu 3MF**.
    Use the arrow segment on the download button when you need geometry-only STL instead.
@@ -67,9 +68,9 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 
 ## Geometry and print safeguards
 
-- Four quiet-zone modules on every side fit inside every shape with another 1 mm of edge clearance.
+- Four quiet-zone modules on every side fit inside every shape with a configurable physical edge padding of 1 mm by default.
 - The overall width is clamped to the shape-specific minimum that keeps every QR module printable with the selected nozzle.
-- Corner treatments include shape default, sharp, softened, and rounded.
+- Corner treatments include shape default, sharp, softened, rounded, and an exact custom radius with millimeter or inch entry.
 - Lower-edge treatments include a straight wall, chamfered foot, rounded foot, stepped inset, and a taper angled inward from the build plate.
 - Top-edge treatments provide the inverse controls at the upper perimeter: straight, chamfered, rounded, stepped inset, or angled inward.
 - QR sizing accounts for the narrowest treated top perimeter so the quiet zone retains its clearance.
@@ -77,8 +78,9 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 - Bed scale view shows the token at real scale on the selected profile’s print bed.
 - The generated preview uses a high-contrast dark QR and light surface.
 - Print-safe QR patterns include classic blocks, rounded tiles, dots, and faceted tiles.
-- Finder-eye treatments include classic square, rounded, and circular styles.
-- A clear center or social icon badge removes only a bounded central module region, preserves the quiet zone and finder eyes, locks classic modules and square finder eyes, and forces High error correction.
+- Finder treatments separate square, rounded, or circular outer frames from square, rounded, circular, or diamond centers.
+- The UI limits the diamond center to the circular frame and prevents the circular-frame/square-center pairing because those alternatives fail independent scan checks.
+- A clear center or social icon badge removes only a bounded central module region, preserves the quiet zone and finder eyes, locks classic modules with square finder frames and centers, and forces High error correction.
 - Every browser preview is independently decoded with jsQR before export is enabled.
 - Manifold WebAssembly performs the 2D and 3D boolean operations that produce watertight single or complementary material parts.
 - A 0.01 mm corner relief prevents diagonal QR cells from creating non-manifold edges when an STL reader welds vertices.
@@ -113,7 +115,7 @@ It is useful for batch generation and cross-checking the browser implementation.
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe server.py --url https://example.com --shape rectangle --diameter 92 --shape-height 50 --center-icon instagram --corner-style rounded --edge-profile chamfered --top-profile rounded --treatment inset --base 1 --relief 1 --output generated
+.venv\Scripts\python.exe server.py --url https://example.com --shape rectangle --diameter 92 --shape-height 50 --corner-style custom --corner-radius 0.25 --corner-radius-unit in --padding 2 --finder-style rounded --finder-center-style circle --edge-profile chamfered --top-profile rounded --treatment inset --base 1 --relief 1 --output generated
 ```
 
 Omit the generation arguments to run the Flask workspace at <http://127.0.0.1:8765/>.

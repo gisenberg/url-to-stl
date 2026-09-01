@@ -65,6 +65,13 @@ test('rejects invalid URLs, dimensions, colors, and filament assignments', () =>
     { url: 'https://example.com', edge_size: 3 },
     { url: 'https://example.com', module_style: 'hearts' },
     { url: 'https://example.com', finder_style: 'flower' },
+    { url: 'https://example.com', finder_center_style: 'star' },
+    { url: 'https://example.com', finder_style: 'square', finder_center_style: 'diamond' },
+    { url: 'https://example.com', finder_style: 'rounded', finder_center_style: 'diamond' },
+    { url: 'https://example.com', finder_style: 'circle', finder_center_style: 'square' },
+    { url: 'https://example.com', padding: 26 },
+    { url: 'https://example.com', padding_unit: 'cm' },
+    { url: 'https://example.com', shape: 'square', corner_style: 'custom', corner_radius: 31 },
     { url: 'https://example.com', center_icon: 'myspace' },
     { url: 'https://example.com', module_style: 'dots', center_icon: 'instagram' },
     { url: 'https://example.com', finder_style: 'rounded', center_icon: 'instagram' },
@@ -204,6 +211,22 @@ test('print-safe module and finder styles produce printable geometry', () => {
   }
 });
 
+test('independent finder frame and center styles produce printable geometry', () => {
+  const combinations = [
+    ['square', 'square'], ['square', 'rounded'], ['square', 'circle'],
+    ['rounded', 'square'], ['rounded', 'rounded'], ['rounded', 'circle'],
+    ['circle', 'rounded'], ['circle', 'circle'], ['circle', 'diamond'],
+  ];
+  for (const [finder_style, finder_center_style] of combinations) {
+    const token = createToken({
+      url: 'https://example.com', diameter: 80, treatment: 'inset', finder_style, finder_center_style,
+    }, parsed.profile);
+    assert.equal(token.finder_style, finder_style);
+    assert.equal(token.finder_center_style, finder_center_style);
+    assert.ok(buildMesh(manifold, token).volume > 0);
+  }
+});
+
 test('center badges reserve a protected area and force high error correction', () => {
   for (const center_icon of ['blank', 'instagram', 'x', 'facebook', 'linkedin', 'youtube', 'tiktok']) {
     const token = createToken({
@@ -264,6 +287,24 @@ test('corner treatments preserve the requested envelope and printable geometry',
       assert.ok(mesh.volume > 0);
     }
   }
+});
+
+test('exact corner radius and border padding convert inches to millimeters', () => {
+  const token = createToken({
+    url: 'https://example.com', shape: 'rectangle', diameter: 90, shape_height: 50,
+    corner_style: 'custom', corner_radius: .25, corner_radius_unit: 'in',
+    padding: .125, padding_unit: 'in', treatment: 'inset',
+  }, parsed.profile);
+  assert.equal(token.corner_radius, 6.35);
+  assert.equal(token.padding, 3.175);
+  assert.equal(token.shape_width, 90);
+  assert.equal(token.shape_height, 50);
+  assert.deepEqual(token.outline[0], [45, 18.65]);
+  assert.ok(buildMesh(manifold, token).volume > 0);
+  const compact = createToken({ url: 'https://example.com', shape: 'square', padding: 0 }, parsed.profile);
+  const padded = createToken({ url: 'https://example.com', shape: 'square', padding: 8 }, parsed.profile);
+  assert.ok(padded.minimum_diameter > compact.minimum_diameter);
+  assert.ok(padded.module_size < compact.module_size);
 });
 
 test('packages the native Bambu settings and exactly one layer tool change', async () => {

@@ -178,6 +178,38 @@ def main():
                 "finder_style": "circle",
             },
         ),
+        (
+            "exact-radius-and-padding-inches",
+            {
+                "treatment": "inset",
+                "shape": "rectangle",
+                "diameter": 90,
+                "shape_height": 50,
+                "corner_style": "custom",
+                "corner_radius": 0.25,
+                "corner_radius_unit": "in",
+                "padding": 0.125,
+                "padding_unit": "in",
+            },
+        ),
+        (
+            "circle-frame-diamond-center",
+            {
+                "treatment": "inset",
+                "diameter": 80,
+                "finder_style": "circle",
+                "finder_center_style": "diamond",
+            },
+        ),
+        (
+            "circle-frame-rounded-center",
+            {
+                "treatment": "inset",
+                "diameter": 80,
+                "finder_style": "circle",
+                "finder_center_style": "rounded",
+            },
+        ),
         ("different-first-layer", {"layer_height": 0.16}),
         ("reversed-filaments", {"base_filament": 2, "qr_filament": 1}),
     ]

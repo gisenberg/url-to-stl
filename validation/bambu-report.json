@@ -179,6 +179,39 @@
       "correct_filament_on_every_model_layer": true
     },
     {
+      "case": "exact-radius-and-padding-inches",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolchange_count": 1,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "circle-frame-diamond-center",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolchange_count": 1,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "circle-frame-rounded-center",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolchange_count": 1,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
       "case": "different-first-layer",
       "bambu_result": "Success",
       "filament_changes": 1,

@@ -146,8 +146,12 @@ def main():
         "--shape", choices=("circle", "square", "rectangle", "pentagon", "hexagon"), default="circle"
     )
     parser.add_argument(
-        "--corner-style", choices=("default", "sharp", "softened", "rounded"), default="default"
+        "--corner-style", choices=("default", "sharp", "softened", "rounded", "custom"), default="default"
     )
+    parser.add_argument("--corner-radius", type=float, default=4)
+    parser.add_argument("--corner-radius-unit", choices=("mm", "in"), default="mm")
+    parser.add_argument("--padding", type=float, default=1)
+    parser.add_argument("--padding-unit", choices=("mm", "in"), default="mm")
     parser.add_argument(
         "--edge-profile", choices=("straight", "chamfered", "rounded", "inset", "tapered"), default="straight"
     )
@@ -163,6 +167,9 @@ def main():
     )
     parser.add_argument("--module-style", choices=("square", "rounded", "dots", "faceted"), default="square")
     parser.add_argument("--finder-style", choices=("square", "rounded", "circle"), default="square")
+    parser.add_argument(
+        "--finder-center-style", choices=("square", "rounded", "circle", "diamond"), default="square"
+    )
     parser.add_argument(
         "--center-icon",
         choices=("none", "blank", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"),

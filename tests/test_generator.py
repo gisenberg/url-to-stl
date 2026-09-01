@@ -214,6 +214,35 @@ def test_print_safe_qr_styles_are_watertight_and_scannable(module_style, finder_
 
 
 @pytest.mark.parametrize(
+    ("finder_style", "finder_center_style"),
+    [
+        ("square", "square"),
+        ("square", "rounded"),
+        ("square", "circle"),
+        ("rounded", "square"),
+        ("rounded", "rounded"),
+        ("rounded", "circle"),
+        ("circle", "rounded"),
+        ("circle", "circle"),
+        ("circle", "diamond"),
+    ],
+)
+def test_independent_finder_frame_and_center_styles_scan(finder_style, finder_center_style):
+    token = create_token(
+        {
+            "url": "https://example.com",
+            "diameter": 80,
+            "treatment": "inset",
+            "finder_style": finder_style,
+            "finder_center_style": finder_center_style,
+        }
+    )
+    assert token.finder_style == finder_style
+    assert token.finder_center_style == finder_center_style
+    test_printed_top_geometry_decodes_exact_url(token, token.mesh())
+
+
+@pytest.mark.parametrize(
     "center_icon", ["blank", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"]
 )
 def test_center_badges_reserve_space_force_high_correction_and_scan(center_icon):
@@ -276,6 +305,37 @@ def test_corner_treatments_preserve_dimensions_and_printability(shape, corner_st
     assert token.shape_width == pytest.approx(60)
     assert mesh.is_watertight
     assert mesh.is_winding_consistent
+
+
+def test_exact_corner_radius_and_border_padding_accept_inches_and_preserve_geometry():
+    token = create_token(
+        {
+            "url": "https://example.com",
+            "shape": "rectangle",
+            "diameter": 90,
+            "shape_height": 50,
+            "corner_style": "custom",
+            "corner_radius": 0.25,
+            "corner_radius_unit": "in",
+            "padding": 0.125,
+            "padding_unit": "in",
+            "treatment": "inset",
+        }
+    )
+    assert token.corner_radius == pytest.approx(6.35)
+    assert token.padding == pytest.approx(3.175)
+    assert token.shape_width == pytest.approx(90)
+    assert token.shape_height == pytest.approx(50)
+    assert token.outline[0] == pytest.approx((45, 18.65))
+    assert token.mesh().is_watertight
+
+
+def test_padding_changes_physical_border_and_minimum_print_size():
+    compact = create_token({"url": "https://example.com", "shape": "square", "padding": 0})
+    padded = create_token({"url": "https://example.com", "shape": "square", "padding": 8})
+    assert compact.padding == 0
+    assert padded.minimum_diameter > compact.minimum_diameter
+    assert padded.module < compact.module
 
 
 def test_full_quiet_zone_fits_inside_circle(token):
@@ -454,6 +514,13 @@ def test_different_patterns_survive_stl_welding(url, correction):
         {"icon": "instagram"},
         {"module_style": "hearts"},
         {"finder_style": "flower"},
+        {"finder_center_style": "star"},
+        {"finder_style": "square", "finder_center_style": "diamond"},
+        {"finder_style": "rounded", "finder_center_style": "diamond"},
+        {"finder_style": "circle", "finder_center_style": "square"},
+        {"padding": 26},
+        {"padding_unit": "cm"},
+        {"shape": "square", "corner_style": "custom", "corner_radius": 31},
         {"center_icon": "myspace"},
         {"module_style": "dots", "center_icon": "instagram"},
         {"finder_style": "rounded", "center_icon": "instagram"},

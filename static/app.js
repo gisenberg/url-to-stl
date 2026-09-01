@@ -40,6 +40,21 @@ function values() {
 function measurement(value) {
   return Number(value).toFixed(1).replace(/\.0$/, '');
 }
+
+function measurementValue(mm, unit) {
+  const value = unit === 'in' ? mm / 25.4 : mm;
+  return Number(value.toFixed(unit === 'in' ? 3 : 1)).toString();
+}
+
+function updateMeasurementInput(inputId, unitId, minimumMm, maximumMm) {
+  const input = $(inputId);
+  const unit = $(unitId).value;
+  input.min = measurementValue(minimumMm, unit);
+  input.max = measurementValue(maximumMm, unit);
+  input.step = unit === 'in' ? '0.001' : '0.1';
+  if (Number(input.value) < Number(input.min)) input.value = input.min;
+  if (Number(input.value) > Number(input.max)) input.value = input.max;
+}
 async function post(path, data, signal) {
   const response = await fetch(path, { method: 'POST', signal,
     headers: { 'Content-Type': 'application/json', 'X-Token-Studio': session }, body: JSON.stringify(data) });
@@ -71,6 +86,12 @@ function updateFields() {
     hexagon: 'A durable tile that packs and sorts neatly.',
   }[shape];
   $('corner_style').disabled = shape === 'circle' || businessCard;
+  const customCorners = shape !== 'circle' && ($('corner_style').value === 'custom' || businessCard);
+  $('corner_radius').disabled = !customCorners;
+  $('corner_radius_unit').disabled = !customCorners;
+  const shortestSide = Math.min(Number($('diameter').value), shape === 'rectangle' ? Number($('shape_height').value) : Number($('diameter').value));
+  updateMeasurementInput('corner_radius', 'corner_radius_unit', .1, shortestSide / 2);
+  updateMeasurementInput('padding', 'padding_unit', 0, 25);
   const edgeProfile = $('edge_profile').value;
   $('edge_size').disabled = edgeProfile === 'straight';
   $('edge-note').textContent = {
@@ -120,16 +141,27 @@ function updateFields() {
       ? 'The dark QR and light background are complementary material parts with one level top surface. Bambu Studio assigns each part to its AMS filament.'
       : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
   const centerBadge = $('center_icon').value !== 'none';
+  const finderFrame = $('finder_style').value;
+  const centerOptions = $('finder_center_style').options;
+  for (const option of centerOptions) {
+    option.disabled = (finderFrame !== 'circle' && option.value === 'diamond')
+      || (finderFrame === 'circle' && option.value === 'square');
+  }
+  if ($('finder_center_style').selectedOptions[0]?.disabled) {
+    $('finder_center_style').value = finderFrame === 'circle' ? 'circle' : 'rounded';
+  }
   $('module_style').disabled = centerBadge;
   $('finder_style').disabled = centerBadge;
+  $('finder_center_style').disabled = centerBadge;
   if (centerBadge) {
     $('module_style').value = 'square';
     $('finder_style').value = 'square';
+    $('finder_center_style').value = 'square';
   }
   $('correction').disabled = centerBadge;
   if (centerBadge) $('correction').value = 'H';
   $('center-icon-note').textContent = centerBadge
-    ? 'A protected light center is reserved. Classic modules, square finder eyes, and High error correction are locked because that combination survives slicing.'
+    ? 'A protected light center is reserved. Classic modules, square finder frames and centers, and High error correction are locked because that combination survives slicing.'
     : 'Center badges reserve a protected light area and automatically use high error correction.';
 }
 function applyDiameterLimits(next) {
@@ -249,7 +281,8 @@ function drawScan() {
   });
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = inset ? token.base_color : token.qr_color;
-  const classic = token.module_style === 'square' && token.finder_style === 'square' && token.center_icon === 'none';
+  const classic = token.module_style === 'square' && token.finder_style === 'square'
+    && token.finder_center_style === 'square' && token.center_icon === 'none';
   if (classic) {
     const pitch = token.module_size * scale;
     const half = token.modules * token.module_size / 2;
@@ -562,7 +595,8 @@ async function download(kind) {
 $('preset').addEventListener('input', () => {
   if ($('preset').value === 'business-card') {
     $('shape').value = 'rectangle';
-    $('corner_style').value = 'rounded';
+    $('corner_style').value = 'custom';
+    $('corner_radius').value = measurementValue(3.2, $('corner_radius_unit').value);
     $('diameter').value = '85.6';
     $('shape_height').value = '54';
   } else {
@@ -572,6 +606,17 @@ $('preset').addEventListener('input', () => {
   }
   updateFields();
 });
+for (const [inputId, unitId] of [['corner_radius', 'corner_radius_unit'], ['padding', 'padding_unit']]) {
+  const unit = $(unitId);
+  unit.dataset.previousUnit = unit.value;
+  unit.addEventListener('change', () => {
+    const previous = unit.dataset.previousUnit || 'mm';
+    const millimeters = Number($(inputId).value) * (previous === 'in' ? 25.4 : 1);
+    $(inputId).value = measurementValue(millimeters, unit.value);
+    unit.dataset.previousUnit = unit.value;
+    updateFields();
+  });
+}
 form.addEventListener('submit', e => {e.preventDefault();});
 form.addEventListener('input', e => {if (e.target.id !== 'template-file') invalidate();});
 $('view-detail').addEventListener('click', () => switchView('detail'));

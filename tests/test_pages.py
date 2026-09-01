@@ -15,7 +15,10 @@ def test_pages_build_is_the_generator_without_server_routes():
         assert "Business card" in html
         assert "Brand icon" in html
         assert "QR modules" in html
-        assert "Finder eyes" in html
+        assert "Finder frame" in html
+        assert "Finder center" in html
+        assert "Light border padding" in html
+        assert "Corner radius" in html
         assert "Center badge" in html
         assert "Flat · dark code flush with a light face" in html
         assert "Two pieces · separate base and cap" in html

@@ -5,12 +5,13 @@ export class InputError extends Error {}
 
 const encoder = new TextEncoder();
 const TOKEN_SHAPES = new Set(['circle', 'square', 'rectangle', 'pentagon', 'hexagon']);
-const CORNER_STYLES = new Set(['default', 'sharp', 'softened', 'rounded']);
+const CORNER_STYLES = new Set(['default', 'sharp', 'softened', 'rounded', 'custom']);
 const EDGE_PROFILES = new Set(['straight', 'chamfered', 'rounded', 'inset', 'tapered']);
 const TOKEN_PRESETS = new Set(['custom', 'business-card']);
 const TOKEN_ICONS = new Set(['none', 'instagram', 'x', 'facebook', 'linkedin', 'youtube', 'tiktok']);
 const QR_MODULE_STYLES = new Set(['square', 'rounded', 'dots', 'faceted']);
 const QR_FINDER_STYLES = new Set(['square', 'rounded', 'circle']);
+const QR_FINDER_CENTER_STYLES = new Set(['square', 'rounded', 'circle', 'diamond']);
 const QR_CENTER_ICONS = new Set(['none', 'blank', 'instagram', 'x', 'facebook', 'linkedin', 'youtube', 'tiktok']);
 
 function number(data, key, fallback, minimum, maximum) {
@@ -21,6 +22,19 @@ function number(data, key, fallback, minimum, maximum) {
     throw new InputError(`${label(key)} must be between ${minimum} and ${maximum}.`);
   }
   return value;
+}
+
+function measurementMm(data, key, fallback, minimum, maximum) {
+  const unit = data[`${key}_unit`] || 'mm';
+  if (!['mm', 'in'].includes(unit)) throw new InputError(`${label(key)} unit must be millimeters or inches.`);
+  const raw = data[key] === undefined || data[key] === '' ? (unit === 'mm' ? fallback : fallback / 25.4) : data[key];
+  let value = Number(raw);
+  if (!Number.isFinite(value)) throw new InputError(`${label(key)} must be a number.`);
+  if (unit === 'in') value *= 25.4;
+  if (value < minimum || value > maximum) {
+    throw new InputError(`${label(key)} must be between ${minimum} and ${maximum} mm.`);
+  }
+  return round(value);
 }
 
 function label(key) {
@@ -114,7 +128,7 @@ function normalizeOutline(outline, width, height) {
   return outline.map(([x, y]) => [round(x * width / dimensions.width), round(y * height / dimensions.height)]);
 }
 
-function shapeOutline(shape, width, height = width, cornerStyle = 'default') {
+function shapeOutline(shape, width, height = width, cornerStyle = 'default', cornerRadius = 4) {
   if (shape === 'circle') {
     return Array.from({ length: 256 }, (_, index) => {
       const angle = Math.PI * 2 * index / 256;
@@ -132,7 +146,8 @@ function shapeOutline(shape, width, height = width, cornerStyle = 'default') {
   if (cornerStyle === 'default') {
     radius = Math.min(shape === 'square' ? 4 : 5, (shape === 'square' ? width : height) * (shape === 'square' ? .07 : .1));
   } else if (cornerStyle === 'softened') radius = Math.min(1.2, width * .03);
-  else radius = Math.min(4, width * .08);
+  else if (cornerStyle === 'rounded') radius = Math.min(4, width * .08);
+  else radius = cornerRadius;
   return normalizeOutline(roundedPolygon(points, radius), width, height);
 }
 
@@ -165,18 +180,18 @@ function moduleSizeForOutline(outline, modules, centerX = 0, centerY = 0, cleara
   return Math.max(0, 2 * qrHalf / (modules + 8));
 }
 
-function moduleSizeForShape(shape, width, height, modules, cornerStyle = 'default', perimeterInset = 0) {
-  const outline = shapeOutline(shape, width, height, cornerStyle);
-  return moduleSizeForOutline(insetOutline(outline, width, height, perimeterInset), modules);
+function moduleSizeForShape(shape, width, height, modules, cornerStyle = 'default', perimeterInset = 0, clearance = 1, cornerRadius = 4) {
+  const outline = shapeOutline(shape, width, height, cornerStyle, cornerRadius);
+  return moduleSizeForOutline(insetOutline(outline, width, height, perimeterInset), modules, 0, 0, clearance);
 }
 
-function minimumShapeWidth(shape, modules, minimumModule, cornerStyle = 'default', perimeterInset = 0) {
+function minimumShapeWidth(shape, modules, minimumModule, cornerStyle = 'default', perimeterInset = 0, clearance = 1, cornerRadius = 4) {
   let low = 25;
   let high = 200;
-  if (moduleSizeForShape(shape, high, high, modules, cornerStyle, perimeterInset) < minimumModule) return Infinity;
+  if (moduleSizeForShape(shape, high, high, modules, cornerStyle, perimeterInset, clearance, cornerRadius) < minimumModule) return Infinity;
   for (let iteration = 0; iteration < 48; iteration++) {
     const middle = (low + high) / 2;
-    if (moduleSizeForShape(shape, middle, middle, modules, cornerStyle, perimeterInset) >= minimumModule) high = middle;
+    if (moduleSizeForShape(shape, middle, middle, modules, cornerStyle, perimeterInset, clearance, cornerRadius) >= minimumModule) high = middle;
     else low = middle;
   }
   return Math.ceil(high - 1e-7);
@@ -320,7 +335,19 @@ function isFinderCell(row, column, modules) {
     || (row >= modules - 7 && column < 7);
 }
 
-function finderOutlines(style, left, bottom, pitch) {
+function finderCenterOutline(style, centerX, centerY, pitch) {
+  if (style === 'circle') return circleOutline(centerX, centerY, 1.5 * pitch, 40);
+  if (style === 'rounded') return roundedRectangleOutline(centerX, centerY, 3 * pitch, 3 * pitch, pitch * .7, 8);
+  if (style === 'diamond') {
+    const radius = 1.65 * pitch;
+    return [[centerX, centerY + radius], [centerX - radius, centerY],
+      [centerX, centerY - radius], [centerX + radius, centerY]]
+      .map(point => point.map(value => round(value)));
+  }
+  return rectangleOutline(centerX, centerY, 3 * pitch, 3 * pitch);
+}
+
+function finderOutlines(style, centerStyle, left, bottom, pitch) {
   const outlines = [];
   const centerX = left + 3.5 * pitch;
   const centerY = bottom + 3.5 * pitch;
@@ -335,7 +362,7 @@ function finderOutlines(style, left, bottom, pitch) {
         [centerX + 2.5 * pitch * Math.cos(a), centerY + 2.5 * pitch * Math.sin(a)],
       ].map(point => point.map(value => round(value))));
     }
-    outlines.push(circleOutline(centerX, centerY, 1.5 * pitch, 40));
+    outlines.push(finderCenterOutline(centerStyle, centerX, centerY, pitch));
     return outlines;
   }
   if (style === 'rounded') {
@@ -345,14 +372,14 @@ function finderOutlines(style, left, bottom, pitch) {
     outlines.push(roundedRectangleOutline(centerX, bottom + .5 * pitch, 7 * pitch, stroke, radius));
     outlines.push(roundedRectangleOutline(left + .5 * pitch, centerY, stroke, 5.2 * pitch, radius));
     outlines.push(roundedRectangleOutline(left + 6.5 * pitch, centerY, stroke, 5.2 * pitch, radius));
-    outlines.push(roundedRectangleOutline(centerX, centerY, 3 * pitch, 3 * pitch, pitch * .55, 6));
+    outlines.push(finderCenterOutline(centerStyle, centerX, centerY, pitch));
     return outlines;
   }
   outlines.push(rectangleOutline(centerX, bottom + 6.5 * pitch, 7 * pitch, pitch));
   outlines.push(rectangleOutline(centerX, bottom + .5 * pitch, 7 * pitch, pitch));
   outlines.push(rectangleOutline(left + .5 * pitch, centerY, pitch, 5 * pitch));
   outlines.push(rectangleOutline(left + 6.5 * pitch, centerY, pitch, 5 * pitch));
-  outlines.push(rectangleOutline(centerX, centerY, 3 * pitch, 3 * pitch));
+  outlines.push(finderCenterOutline(centerStyle, centerX, centerY, pitch));
   return outlines;
 }
 
@@ -380,7 +407,8 @@ function featureOutlines(token) {
   const centerSpan = token.center_icon === 'none' ? 0 : token.center_span_modules;
   const centerStart = (token.modules - centerSpan) / 2;
   const centerEnd = centerStart + centerSpan;
-  const styled = token.module_style !== 'square' || token.finder_style !== 'square' || centerSpan;
+  const styled = token.module_style !== 'square' || token.finder_style !== 'square'
+    || token.finder_center_style !== 'square' || centerSpan;
   if (styled) {
     for (let row = 0; row < token.modules; row++) {
       for (let column = 0; column < token.modules; column++) {
@@ -397,7 +425,8 @@ function featureOutlines(token) {
       [token.qr_offset_x - offset, token.qr_offset_y - offset],
     ];
     for (const [left, bottom] of finderPositions) {
-      outlines.push(...finderOutlines(token.finder_style, left, bottom, token.module_size));
+      outlines.push(...finderOutlines(
+        token.finder_style, token.finder_center_style, left, bottom, token.module_size));
     }
     if (!['none', 'blank'].includes(token.center_icon)) {
       outlines.push(...iconOutlines(token.center_icon, token.qr_offset_x, token.qr_offset_y, token.center_icon_size));
@@ -441,7 +470,7 @@ export function createToken(data, profile) {
   if (!TOKEN_PRESETS.has(preset)) throw new InputError('Token preset is not supported.');
   const shape = preset === 'business-card' ? 'rectangle' : (data.shape || 'circle');
   if (!TOKEN_SHAPES.has(shape)) throw new InputError('Token shape is not supported.');
-  let cornerStyle = preset === 'business-card' ? 'rounded' : (data.corner_style || 'default');
+  let cornerStyle = preset === 'business-card' ? 'custom' : (data.corner_style || 'default');
   if (!CORNER_STYLES.has(cornerStyle)) throw new InputError('Corner treatment is not supported.');
   if (shape === 'circle') cornerStyle = 'default';
   const edgeProfile = data.edge_profile || 'straight';
@@ -453,6 +482,12 @@ export function createToken(data, profile) {
   const requestedDiameter = preset === 'business-card' ? 85.6 : number(data, 'diameter', 60, 25, 200);
   const requestedShapeHeight = preset === 'business-card' ? 54
     : (shape === 'rectangle' ? number(data, 'shape_height', Math.max(25, round(requestedDiameter * .72)), 25, 200) : requestedDiameter);
+  let cornerRadius = measurementMm(data, 'corner_radius', preset === 'business-card' ? 3.2 : 4, .1, 100);
+  if (shape === 'circle') cornerRadius = 0;
+  else if (cornerStyle === 'custom' && cornerRadius > Math.min(requestedDiameter, requestedShapeHeight) / 2) {
+    throw new InputError("Corner radius cannot exceed half the token's shortest side.");
+  }
+  const padding = measurementMm(data, 'padding', 1, 0, 25);
   const icon = data.icon || 'none';
   if (!TOKEN_ICONS.has(icon)) throw new InputError('Brand icon is not supported.');
   if (icon !== 'none' && preset !== 'business-card') {
@@ -462,10 +497,17 @@ export function createToken(data, profile) {
   if (!QR_MODULE_STYLES.has(moduleStyle)) throw new InputError('QR module style is not supported.');
   const finderStyle = data.finder_style || 'square';
   if (!QR_FINDER_STYLES.has(finderStyle)) throw new InputError('QR finder style is not supported.');
+  const finderCenterStyle = data.finder_center_style
+    || (['rounded', 'circle'].includes(finderStyle) ? finderStyle : 'square');
+  if (!QR_FINDER_CENTER_STYLES.has(finderCenterStyle)) throw new InputError('QR finder center style is not supported.');
+  if ((finderCenterStyle === 'diamond' && finderStyle !== 'circle')
+      || (finderStyle === 'circle' && finderCenterStyle === 'square')) {
+    throw new InputError('This finder frame and center combination is not reliably scannable.');
+  }
   const centerIcon = data.center_icon || 'none';
   if (!QR_CENTER_ICONS.has(centerIcon)) throw new InputError('QR center icon is not supported.');
-  if (centerIcon !== 'none' && (moduleStyle !== 'square' || finderStyle !== 'square')) {
-    throw new InputError('Center badges require classic blocks and square finder eyes for reliable sliced toolpaths.');
+  if (centerIcon !== 'none' && (moduleStyle !== 'square' || finderStyle !== 'square' || finderCenterStyle !== 'square')) {
+    throw new InputError('Center badges require classic blocks with square finder frames and centers for reliable sliced toolpaths.');
   }
   const maximumLayer = Math.min(0.3, nozzle * 0.75);
   const layerHeight = number(data, 'layer_height', 0.2, 0.08, maximumLayer);
@@ -524,7 +566,8 @@ export function createToken(data, profile) {
     diameter = requestedDiameter;
     shapeHeight = requestedShapeHeight;
   } else if (shape === 'rectangle') {
-    const minimumSide = minimumShapeWidth('rectangle', modules, minimumModule, cornerStyle, perimeterInset);
+    const minimumSide = minimumShapeWidth(
+      'rectangle', modules, minimumModule, cornerStyle, perimeterInset, padding, cornerRadius);
     minimumDiameter = minimumSide;
     minimumHeight = minimumSide;
     diameter = Math.max(requestedDiameter, minimumDiameter);
@@ -536,8 +579,10 @@ export function createToken(data, profile) {
       warnings.push(`Height increased to ${formatNumber(minimumHeight)} mm so the QR quiet zone remains printable.`);
     }
   } else {
-    minimumDiameter = minimumShapeWidth(shape, modules, minimumModule, cornerStyle, perimeterInset);
-    minimumHeight = round(outlineDimensions(shapeOutline(shape, minimumDiameter, minimumDiameter, cornerStyle)).height);
+    minimumDiameter = minimumShapeWidth(
+      shape, modules, minimumModule, cornerStyle, perimeterInset, padding, cornerRadius);
+    minimumHeight = round(outlineDimensions(
+      shapeOutline(shape, minimumDiameter, minimumDiameter, cornerStyle, cornerRadius)).height);
     diameter = Math.max(requestedDiameter, minimumDiameter);
     shapeHeight = diameter;
     if (diameter > requestedDiameter) {
@@ -552,20 +597,20 @@ export function createToken(data, profile) {
   if (diameter > maximumWidth || shapeHeight > maximumHeight) {
     throw new InputError(`This token is ${formatNumber(diameter)} × ${formatNumber(shapeHeight)} mm, but this bed allows ${formatNumber(maximumWidth)} × ${formatNumber(maximumHeight)} mm with prime-tower clearance.`);
   }
-  const outline = shapeOutline(shape, diameter, shapeHeight, cornerStyle);
+  const outline = shapeOutline(shape, diameter, shapeHeight, cornerStyle, cornerRadius);
   const dimensions = outlineDimensions(outline);
   const usableOutline = insetOutline(outline, dimensions.width, dimensions.height, perimeterInset);
   if (preset === 'business-card') {
-    const margin = 3;
+    const margin = padding;
     moduleSize = (dimensions.height - 2 * (perimeterInset + margin)) / (modules + 8);
     const fieldHalf = (modules + 8) * moduleSize / 2;
     qrOffsetX = dimensions.width / 2 - perimeterInset - margin - fieldHalf;
-    moduleSize = Math.min(moduleSize, moduleSizeForOutline(usableOutline, modules, qrOffsetX, 0, 0));
+    moduleSize = Math.min(moduleSize, moduleSizeForOutline(usableOutline, modules, qrOffsetX, 0, padding));
     if (moduleSize < minimumModule) {
       throw new InputError(`This URL is too dense for the business-card preset with a ${formatNumber(nozzle)} mm nozzle. Shorten the URL or use a custom rectangle.`);
     }
   } else {
-    moduleSize = moduleSizeForOutline(usableOutline, modules);
+    moduleSize = moduleSizeForOutline(usableOutline, modules, 0, 0, padding);
   }
   if (moduleSize < 1.2) warnings.push(`QR modules are ${moduleSize.toFixed(2)} mm wide. Print a scan test; 1.2 mm or larger is more forgiving.`);
   const baseColor = color(data, 'base_color', treatment === 'inset' ? '#181818' : '#F5F0E5');
@@ -606,6 +651,8 @@ export function createToken(data, profile) {
     shape_width: dimensions.width,
     shape_height: dimensions.height,
     corner_style: cornerStyle,
+    corner_radius: cornerRadius,
+    padding,
     edge_profile: edgeProfile,
     edge_size: edgeSize,
     top_profile: topProfile,
@@ -639,6 +686,7 @@ export function createToken(data, profile) {
     icon_outlines: iconOutlines(icon, iconCenterX, iconCenterY, iconSize),
     module_style: moduleStyle,
     finder_style: finderStyle,
+    finder_center_style: finderCenterStyle,
     center_icon: centerIcon,
     center_span_modules: centerSpanModules,
     center_icon_size: centerIconSize,
@@ -1045,6 +1093,7 @@ export async function tokenFilename(token) {
   if (token.icon !== 'none') details.push(token.icon);
   if (token.module_style !== 'square') details.push(token.module_style);
   if (token.finder_style !== 'square') details.push(`eyes-${token.finder_style}`);
+  if (token.finder_center_style !== 'square') details.push(`eye-center-${token.finder_center_style}`);
   if (token.center_icon !== 'none') details.push(`center-${token.center_icon}`);
   if (token.construction === 'two-piece') details.push('two-piece');
   details.push(token.treatment);
@@ -1086,7 +1135,7 @@ export function encodeBambu3mf(template, profile, token, mesh, filename, pngByte
   const components = projectParts.map((part, index) => `<component objectid="${index + 1}" p:path="/3D/Objects/object_${index + 1}.model" transform="1 0 0 0 1 0 0 0 1 0 0 0"/>`).join('');
   const changeDescription = token.change_z == null ? 'Material assignments are stored on independent model parts.'
     : `Change before layer ${token.change_layer}, top Z ${formatNumber(token.change_z)} mm.`;
-  const rootModel = `<?xml version="1.0" encoding="utf-8"?><model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" unit="millimeter" requiredextensions="p"><metadata name="Application">${xmlEscape(template.application)}</metadata><metadata name="BambuStudio:3mfVersion">1</metadata><metadata name="Title">${xmlEscape(filename)}</metadata><metadata name="CreationDate">${date}</metadata><metadata name="Description">QR Token Studio ${token.shape} with ${token.module_style} QR modules, ${token.finder_style} finder eyes, ${token.corner_style} corners, ${token.edge_profile} lower edge, and ${token.top_profile} top edge. ${label(token.treatment)} QR treatment. ${changeDescription}</metadata><resources><object id="${rootId}" type="model"><components>${components}</components></object></resources><build><item objectid="${rootId}" printable="1" transform="1 0 0 0 1 0 0 0 1 ${formatNumber(centerX)} ${formatNumber(centerY)} 0"/></build></model>`;
+  const rootModel = `<?xml version="1.0" encoding="utf-8"?><model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" unit="millimeter" requiredextensions="p"><metadata name="Application">${xmlEscape(template.application)}</metadata><metadata name="BambuStudio:3mfVersion">1</metadata><metadata name="Title">${xmlEscape(filename)}</metadata><metadata name="CreationDate">${date}</metadata><metadata name="Description">QR Token Studio ${token.shape} with ${token.module_style} QR modules, ${token.finder_style} finder frames, ${token.finder_center_style} finder centers, ${token.corner_style} corners, ${formatNumber(token.padding)} mm border padding, ${token.edge_profile} lower edge, and ${token.top_profile} top edge. ${label(token.treatment)} QR treatment. ${changeDescription}</metadata><resources><object id="${rootId}" type="model"><components>${components}</components></object></resources><build><item objectid="${rootId}" printable="1" transform="1 0 0 0 1 0 0 0 1 ${formatNumber(centerX)} ${formatNumber(centerY)} 0"/></build></model>`;
   const partSettings = projectParts.map((part, index) => `<part id="${index + 1}" subtype="normal_part">${metadata('name', part.name)}${metadata('extruder', part.filament)}${metadata('matrix', '1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1')}<mesh_stat face_count="${part.mesh.triangles.length / 3}" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/></part>`).join('');
   const objectExtruder = projectParts.length === 1 ? metadata('extruder', projectParts[0].filament) : '';
   const modelSettings = `<?xml version="1.0" encoding="utf-8"?><config><object id="${rootId}">${metadata('name', filename)}${objectExtruder}<metadata face_count="${triangleCount}"/>${partSettings}</object><plate>${metadata('plater_id', 1)}${metadata('plater_name', 'QR Token')}${metadata('locked', 'false')}${metadata('filament_map_mode', 'Manual')}${metadata('gcode_file', '')}${metadata('thumbnail_file', 'Metadata/plate_1.png')}<model_instance>${metadata('object_id', rootId)}${metadata('instance_id', 0)}${metadata('identify_id', 1)}</model_instance></plate><assemble/></config>`;

@@ -1,7 +1,7 @@
 {
   "unit_tests": {
-    "python_passed": 123,
-    "browser_core_passed": 18,
+    "python_passed": 141,
+    "browser_core_passed": 20,
     "failed": 0
   },
   "lint": "Ruff and JavaScript syntax checks passed",
@@ -60,7 +60,8 @@
       "default",
       "sharp",
       "softened",
-      "rounded"
+      "rounded",
+      "custom"
     ],
     "native_bambu_edge_profiles": [
       "straight",
@@ -144,12 +145,15 @@
       "module_style": "square",
       "finder_style": "square",
       "correction": "H",
-      "minimum_clear_span_modules": 5
+      "minimum_clear_span_modules": 5,
+      "finder_center_style": "square"
     },
     "browser_style_matrix_verified": true,
     "native_styled_cases": [
       "styled-square-center-instagram",
-      "styled-faceted-circle"
+      "styled-faceted-circle",
+      "circle-frame-diamond-center",
+      "circle-frame-rounded-center"
     ],
     "flat_mode": {
       "material_parts": [
@@ -185,7 +189,58 @@
       "inset",
       "tapered"
     ],
-    "native_bambu_case_count": 18
+    "native_bambu_case_count": 21,
+    "exact_corner_radius": {
+      "units": [
+        "mm",
+        "in"
+      ],
+      "browser_validated": true,
+      "native_bambu_slice_verified": true
+    },
+    "border_padding": {
+      "default_mm": 1,
+      "range_mm": [
+        0,
+        25
+      ],
+      "units": [
+        "mm",
+        "in"
+      ],
+      "quiet_zone_modules_preserved": 4,
+      "browser_validated": true,
+      "native_bambu_slice_verified": true
+    },
+    "qr_finder_center_styles": [
+      "square",
+      "rounded",
+      "circle",
+      "diamond"
+    ],
+    "finder_style_constraints": {
+      "diamond_center_frame": "circle",
+      "circle_frame_excludes_center": "square"
+    },
+    "browser_generated_custom_style_3mf": {
+      "shape": "rectangle",
+      "dimensions_mm": [
+        90,
+        50
+      ],
+      "corner_radius_mm": 6.35,
+      "border_padding_mm": 3.175,
+      "finder_frame": "circle",
+      "finder_center": "diamond",
+      "triangles": 2324,
+      "watertight": true,
+      "native_bambu_slice": "Success",
+      "filament_changes": 1,
+      "change_layer": 6,
+      "change_z": 1.2,
+      "correct_filament_on_every_model_layer": true,
+      "sliced_toolpaths_decode": "https://example.com"
+    }
   },
   "physical_print_tested": false
 }

@@ -29,6 +29,22 @@ def number(data, key, default, minimum, maximum):
     return value
 
 
+def measurement_mm(data, key, default, minimum, maximum):
+    unit = data.get(f"{key}_unit", "mm")
+    if unit not in ("mm", "in"):
+        raise InputError(f"{key.replace('_', ' ').capitalize()} unit must be millimeters or inches.")
+    try:
+        value = float(data.get(key, default if unit == "mm" else default / 25.4))
+    except (TypeError, ValueError) as error:
+        raise InputError(f"{key.replace('_', ' ').capitalize()} must be a number.") from error
+    value *= 25.4 if unit == "in" else 1
+    if not math.isfinite(value) or not minimum <= value <= maximum:
+        raise InputError(
+            f"{key.replace('_', ' ').capitalize()} must be between {minimum:g} and {maximum:g} mm."
+        )
+    return round(value, 6)
+
+
 def color(data, key, default):
     value = data.get(key, default)
     if not isinstance(value, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
@@ -43,12 +59,13 @@ def luminance(hex_color):
 
 
 TOKEN_SHAPES = {"circle", "square", "rectangle", "pentagon", "hexagon"}
-CORNER_STYLES = {"default", "sharp", "softened", "rounded"}
+CORNER_STYLES = {"default", "sharp", "softened", "rounded", "custom"}
 EDGE_PROFILES = {"straight", "chamfered", "rounded", "inset", "tapered"}
 TOKEN_PRESETS = {"custom", "business-card"}
 TOKEN_ICONS = {"none", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"}
 QR_MODULE_STYLES = {"square", "rounded", "dots", "faceted"}
 QR_FINDER_STYLES = {"square", "rounded", "circle"}
+QR_FINDER_CENTER_STYLES = {"square", "rounded", "circle", "diamond"}
 QR_CENTER_ICONS = {"none", "blank", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"}
 
 
@@ -107,7 +124,7 @@ def normalize_outline(outline, width, height):
     return [(round(x * width / current_width, 6), round(y * height / current_height, 6)) for x, y in outline]
 
 
-def shape_outline(shape, width, height=None, corner_style="default"):
+def shape_outline(shape, width, height=None, corner_style="default", corner_radius=4):
     height = width if height is None else height
     if shape == "circle":
         return [
@@ -137,8 +154,10 @@ def shape_outline(shape, width, height=None, corner_style="default"):
         )
     elif corner_style == "softened":
         radius = min(1.2, width * 0.03)
-    else:
+    elif corner_style == "rounded":
         radius = min(4, width * 0.08)
+    else:
+        radius = corner_radius
     return normalize_outline(rounded_polygon(points, radius), width, height)
 
 
@@ -168,19 +187,32 @@ def module_size_for_outline(outline, modules, center_x=0, center_y=0, clearance=
     return max(0, 2 * qr_half / (modules + 8))
 
 
-def module_size_for_shape(shape, width, height, modules, corner_style="default", perimeter_inset=0):
-    outline = shape_outline(shape, width, height, corner_style)
-    return module_size_for_outline(inset_outline(outline, width, height, perimeter_inset), modules)
+def module_size_for_shape(
+    shape, width, height, modules, corner_style="default", perimeter_inset=0, clearance=1, corner_radius=4
+):
+    outline = shape_outline(shape, width, height, corner_style, corner_radius)
+    return module_size_for_outline(
+        inset_outline(outline, width, height, perimeter_inset), modules, clearance=clearance
+    )
 
 
-def minimum_shape_width(shape, modules, minimum_module, corner_style="default", perimeter_inset=0):
+def minimum_shape_width(
+    shape, modules, minimum_module, corner_style="default", perimeter_inset=0, clearance=1, corner_radius=4
+):
     low, high = 25.0, 200.0
-    if module_size_for_shape(shape, high, high, modules, corner_style, perimeter_inset) < minimum_module:
+    if (
+        module_size_for_shape(
+            shape, high, high, modules, corner_style, perimeter_inset, clearance, corner_radius
+        )
+        < minimum_module
+    ):
         return math.inf
     for _ in range(48):
         middle = (low + high) / 2
         if (
-            module_size_for_shape(shape, middle, middle, modules, corner_style, perimeter_inset)
+            module_size_for_shape(
+                shape, middle, middle, modules, corner_style, perimeter_inset, clearance, corner_radius
+            )
             >= minimum_module
         ):
             high = middle
@@ -379,7 +411,23 @@ def is_finder_cell(row, column, modules):
     )
 
 
-def finder_outlines(style, left, bottom, pitch):
+def finder_center_outline(style, center_x, center_y, pitch):
+    if style == "circle":
+        return circle_outline(center_x, center_y, 1.5 * pitch, 40)
+    if style == "rounded":
+        return rounded_rectangle_outline(center_x, center_y, 3 * pitch, 3 * pitch, pitch * 0.7, 8)
+    if style == "diamond":
+        radius = 1.65 * pitch
+        return [
+            (round(center_x, 6), round(center_y + radius, 6)),
+            (round(center_x - radius, 6), round(center_y, 6)),
+            (round(center_x, 6), round(center_y - radius, 6)),
+            (round(center_x + radius, 6), round(center_y, 6)),
+        ]
+    return rectangle_outline(center_x, center_y, 3 * pitch, 3 * pitch)
+
+
+def finder_outlines(style, center_style, left, bottom, pitch):
     outlines = []
     center_x = left + 3.5 * pitch
     center_y = bottom + 3.5 * pitch
@@ -406,7 +454,7 @@ def finder_outlines(style, left, bottom, pitch):
                     ),
                 ]
             )
-        outlines.append(circle_outline(center_x, center_y, 1.5 * pitch, 40))
+        outlines.append(finder_center_outline(center_style, center_x, center_y, pitch))
         return outlines
     if style == "rounded":
         stroke = pitch
@@ -415,13 +463,13 @@ def finder_outlines(style, left, bottom, pitch):
         outlines.append(rounded_rectangle_outline(center_x, bottom + 0.5 * pitch, 7 * pitch, stroke, radius))
         outlines.append(rounded_rectangle_outline(left + 0.5 * pitch, center_y, stroke, 5.2 * pitch, radius))
         outlines.append(rounded_rectangle_outline(left + 6.5 * pitch, center_y, stroke, 5.2 * pitch, radius))
-        outlines.append(rounded_rectangle_outline(center_x, center_y, 3 * pitch, 3 * pitch, pitch * 0.55, 6))
+        outlines.append(finder_center_outline(center_style, center_x, center_y, pitch))
         return outlines
     outlines.append(rectangle_outline(center_x, bottom + 6.5 * pitch, 7 * pitch, pitch))
     outlines.append(rectangle_outline(center_x, bottom + 0.5 * pitch, 7 * pitch, pitch))
     outlines.append(rectangle_outline(left + 0.5 * pitch, center_y, pitch, 5 * pitch))
     outlines.append(rectangle_outline(left + 6.5 * pitch, center_y, pitch, 5 * pitch))
-    outlines.append(rectangle_outline(center_x, center_y, 3 * pitch, 3 * pitch))
+    outlines.append(finder_center_outline(center_style, center_x, center_y, pitch))
     return outlines
 
 
@@ -455,6 +503,8 @@ class Token:
     shape_width: float
     shape_height: float
     corner_style: str
+    corner_radius: float
+    padding: float
     edge_profile: str
     edge_size: float
     edge_slices: list
@@ -480,6 +530,7 @@ class Token:
     icon_size: float
     module_style: str
     finder_style: str
+    finder_center_style: str
     center_icon: str
     center_span_modules: int
     center_icon_size: float
@@ -513,7 +564,9 @@ class Token:
         if self.module_style != "square":
             details.append(self.module_style)
         if self.finder_style != "square":
-            details.append(f"eyes-{self.finder_style}")
+            details.append(f"frame-{self.finder_style}")
+        if self.finder_center_style != "square":
+            details.append(f"eye-center-{self.finder_center_style}")
         if self.center_icon != "none":
             details.append(f"center-{self.center_icon}")
         if self.construction == "two-piece":
@@ -530,6 +583,8 @@ class Token:
             "shape_width": self.shape_width,
             "shape_height": self.shape_height,
             "corner_style": self.corner_style,
+            "corner_radius": self.corner_radius,
+            "padding": self.padding,
             "edge_profile": self.edge_profile,
             "edge_size": self.edge_size,
             "edge_slices": self.edge_slices,
@@ -561,6 +616,7 @@ class Token:
             "icon_outlines": icon_outlines(self.icon, self.icon_center_x, self.icon_center_y, self.icon_size),
             "module_style": self.module_style,
             "finder_style": self.finder_style,
+            "finder_center_style": self.finder_center_style,
             "center_icon": self.center_icon,
             "center_span_modules": self.center_span_modules,
             "center_icon_size": self.center_icon_size,
@@ -588,7 +644,12 @@ class Token:
         center_span = 0 if self.center_icon == "none" else self.center_span_modules
         center_start = (modules - center_span) / 2
         center_end = center_start + center_span
-        styled = self.module_style != "square" or self.finder_style != "square" or center_span
+        styled = (
+            self.module_style != "square"
+            or self.finder_style != "square"
+            or self.finder_center_style != "square"
+            or center_span
+        )
         if styled:
             for row, cells in enumerate(self.matrix):
                 for column, dark in enumerate(cells):
@@ -605,7 +666,9 @@ class Token:
                 (self.qr_offset_x - offset, self.qr_offset_y - offset),
             ]
             for left, bottom in finder_positions:
-                outlines.extend(finder_outlines(self.finder_style, left, bottom, self.module))
+                outlines.extend(
+                    finder_outlines(self.finder_style, self.finder_center_style, left, bottom, self.module)
+                )
             if self.center_icon not in ("none", "blank"):
                 outlines.extend(
                     icon_outlines(self.center_icon, self.qr_offset_x, self.qr_offset_y, self.center_icon_size)
@@ -764,7 +827,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
     shape = "rectangle" if preset == "business-card" else data.get("shape", "circle")
     if shape not in TOKEN_SHAPES:
         raise InputError("Token shape is not supported.")
-    corner_style = "rounded" if preset == "business-card" else data.get("corner_style", "default")
+    corner_style = "custom" if preset == "business-card" else data.get("corner_style", "default")
     if corner_style not in CORNER_STYLES:
         raise InputError("Corner treatment is not supported.")
     if shape == "circle":
@@ -785,6 +848,12 @@ def create_token(data, nozzle=0.4, filament_count=2):
         if shape == "rectangle"
         else requested_diameter
     )
+    corner_radius = measurement_mm(data, "corner_radius", 3.2 if preset == "business-card" else 4, 0.1, 100)
+    if shape == "circle":
+        corner_radius = 0
+    elif corner_style == "custom" and corner_radius > min(requested_diameter, requested_shape_height) / 2:
+        raise InputError("Corner radius cannot exceed half the token's shortest side.")
+    padding = measurement_mm(data, "padding", 1, 0, 25)
     icon = data.get("icon", "none")
     if icon not in TOKEN_ICONS:
         raise InputError("Brand icon is not supported.")
@@ -796,12 +865,23 @@ def create_token(data, nozzle=0.4, filament_count=2):
     finder_style = data.get("finder_style", "square")
     if finder_style not in QR_FINDER_STYLES:
         raise InputError("QR finder style is not supported.")
+    finder_center_style = data.get(
+        "finder_center_style", finder_style if finder_style in ("rounded", "circle") else "square"
+    )
+    if finder_center_style not in QR_FINDER_CENTER_STYLES:
+        raise InputError("QR finder center style is not supported.")
+    if (finder_center_style == "diamond" and finder_style != "circle") or (
+        finder_style == "circle" and finder_center_style == "square"
+    ):
+        raise InputError("This finder frame and center combination is not reliably scannable.")
     center_icon = data.get("center_icon", "none")
     if center_icon not in QR_CENTER_ICONS:
         raise InputError("QR center icon is not supported.")
-    if center_icon != "none" and (module_style != "square" or finder_style != "square"):
+    if center_icon != "none" and (
+        module_style != "square" or finder_style != "square" or finder_center_style != "square"
+    ):
         raise InputError(
-            "Center badges require classic blocks and square finder eyes for reliable sliced toolpaths."
+            "Center badges require classic blocks with square finder frames and centers for reliable sliced toolpaths."
         )
     layer = number(data, "layer_height", 0.2, 0.08, min(0.3, nozzle * 0.75))
     first = number(data, "first_layer", 0.2, 0.08, min(0.3, nozzle * 0.75))
@@ -846,7 +926,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
     except qrcode.exceptions.DataOverflowError as error:
         raise InputError("This URL is too long for a QR code.") from error
     matrix = qr.get_matrix()
-    # The entire QR plus four-module quiet zone fits with 1 mm edge clearance.
+    # The entire QR plus its four-module quiet zone fits with the requested physical edge padding.
     style_scale = {"square": 1, "rounded": 0.96, "dots": 0.96, "faceted": 0.96}[module_style]
     min_module = max(0.6, nozzle * 2) / style_scale
     perimeter_inset = 0 if top_profile == "straight" else top_size
@@ -859,7 +939,13 @@ def create_token(data, nozzle=0.4, filament_count=2):
         shape_height = requested_shape_height
     elif shape == "rectangle":
         minimum_side = minimum_shape_width(
-            "rectangle", len(matrix), min_module, corner_style, perimeter_inset
+            "rectangle",
+            len(matrix),
+            min_module,
+            corner_style,
+            perimeter_inset,
+            padding,
+            corner_radius,
         )
         minimum_diameter = minimum_height = minimum_side
         diameter = max(requested_diameter, minimum_diameter)
@@ -873,9 +959,11 @@ def create_token(data, nozzle=0.4, filament_count=2):
                 f"Height increased to {minimum_height:g} mm so the QR quiet zone remains printable."
             )
     else:
-        minimum_diameter = minimum_shape_width(shape, len(matrix), min_module, corner_style, perimeter_inset)
+        minimum_diameter = minimum_shape_width(
+            shape, len(matrix), min_module, corner_style, perimeter_inset, padding, corner_radius
+        )
         minimum_height = outline_dimensions(
-            shape_outline(shape, minimum_diameter, minimum_diameter, corner_style)
+            shape_outline(shape, minimum_diameter, minimum_diameter, corner_style, corner_radius)
         )[1]
         diameter = max(requested_diameter, minimum_diameter)
         shape_height = diameter
@@ -887,22 +975,22 @@ def create_token(data, nozzle=0.4, filament_count=2):
         raise InputError(
             f"This URL needs a larger {shape} token than the supported 200 mm limit. Shorten the URL."
         )
-    outline = shape_outline(shape, diameter, shape_height, corner_style)
+    outline = shape_outline(shape, diameter, shape_height, corner_style, corner_radius)
     shape_width, shape_height = outline_dimensions(outline)
     usable_outline = inset_outline(outline, shape_width, shape_height, perimeter_inset)
     if preset == "business-card":
-        margin = 3
+        margin = padding
         module = (shape_height - 2 * (perimeter_inset + margin)) / (len(matrix) + 8)
         field_half = (len(matrix) + 8) * module / 2
         qr_offset_x = shape_width / 2 - perimeter_inset - margin - field_half
-        module = min(module, module_size_for_outline(usable_outline, len(matrix), qr_offset_x, 0, 0))
+        module = min(module, module_size_for_outline(usable_outline, len(matrix), qr_offset_x, 0, padding))
         if module < min_module:
             raise InputError(
                 f"This URL is too dense for the business-card preset with a {nozzle:g} mm nozzle. "
                 "Shorten the URL or use a custom rectangle."
             )
     else:
-        module = module_size_for_outline(usable_outline, len(matrix))
+        module = module_size_for_outline(usable_outline, len(matrix), clearance=padding)
     slices = (
         combined_base_slices(edge_profile, edge_size, top_profile, top_size, base)
         if treatment in ("raised", "flat")
@@ -952,6 +1040,8 @@ def create_token(data, nozzle=0.4, filament_count=2):
         shape_width=shape_width,
         shape_height=shape_height,
         corner_style=corner_style,
+        corner_radius=corner_radius,
+        padding=padding,
         edge_profile=edge_profile,
         edge_size=edge_size,
         edge_slices=slices,
@@ -977,6 +1067,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
         icon_size=round(icon_size, 6),
         module_style=module_style,
         finder_style=finder_style,
+        finder_center_style=finder_center_style,
         center_icon=center_icon,
         center_span_modules=center_span_modules,
         center_icon_size=center_icon_size,
