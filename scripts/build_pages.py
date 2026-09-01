@@ -25,6 +25,7 @@ EXCLUDED_PARTS = {
     "site",
 }
 EXCLUDED_FILES = {"startup.log"}
+BINARY_SUFFIXES = {".3mf", ".png", ".stl"}
 
 
 def is_packaged(path: Path) -> bool:
@@ -34,9 +35,12 @@ def is_packaged(path: Path) -> bool:
 
 def add_deterministic_file(archive: zipfile.ZipFile, source: Path, destination: Path) -> None:
     info = zipfile.ZipInfo(destination.as_posix(), date_time=(1980, 1, 1, 0, 0, 0))
-    info.compress_type = zipfile.ZIP_DEFLATED
+    info.compress_type = zipfile.ZIP_STORED
     info.external_attr = 0o100644 << 16
-    archive.writestr(info, source.read_bytes(), compresslevel=9)
+    data = source.read_bytes()
+    if source.suffix.lower() not in BINARY_SUFFIXES:
+        data = data.replace(b"\r\n", b"\n")
+    archive.writestr(info, data)
 
 
 def build(output: Path) -> Path:
