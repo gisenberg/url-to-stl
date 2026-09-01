@@ -50,7 +50,7 @@ function setDownloadMenu(open, focus = false) {
   if (show && focus) $('download-3mf-menu').focus();
 }
 function values() {
-  return Object.fromEntries(new FormData(form));
+  return { ...Object.fromEntries(new FormData(form)), correction: $('correction').value };
 }
 function measurement(value) {
   return Number(value).toFixed(1).replace(/\.0$/, '');
@@ -102,6 +102,18 @@ function updateFields() {
   $('treatment-note').textContent = inset
     ? 'The dark base shows through the QR openings. After one AMS swap, at least five light layers form an opaque top field.'
     : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
+  const centerBadge = $('center_icon').value !== 'none';
+  $('module_style').disabled = centerBadge;
+  $('finder_style').disabled = centerBadge;
+  if (centerBadge) {
+    $('module_style').value = 'square';
+    $('finder_style').value = 'square';
+  }
+  $('correction').disabled = centerBadge;
+  if (centerBadge) $('correction').value = 'H';
+  $('center-icon-note').textContent = centerBadge
+    ? 'A protected light center is reserved. Classic modules, square finder eyes, and High error correction are locked because that combination survives slicing.'
+    : 'Center badges reserve a protected light area and automatically use high error correction.';
 }
 function applyDiameterLimits(next) {
   const control = $('diameter');
@@ -202,17 +214,21 @@ function drawScan() {
     if (index === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
   });
   ctx.closePath(); ctx.fill();
-  const pitch = token.module_size * scale;
-  const half = token.modules * token.module_size / 2;
-  const startX = 450 + (token.qr_offset_x - half) * scale;
-  const startY = 450 - (token.qr_offset_y + half) * scale;
   ctx.fillStyle = inset ? token.base_color : token.qr_color;
-  token.matrix.forEach((row, r) => row.forEach((dark, c) => {
-    if (dark) ctx.fillRect(Math.round(startX + c*pitch), Math.round(startY + r*pitch),
-      Math.round(startX+(c+1)*pitch)-Math.round(startX+c*pitch),
-      Math.round(startY+(r+1)*pitch)-Math.round(startY+r*pitch));
-  }));
-  for (const outline of token.icon_outlines) {
+  const classic = token.module_style === 'square' && token.finder_style === 'square' && token.center_icon === 'none';
+  if (classic) {
+    const pitch = token.module_size * scale;
+    const half = token.modules * token.module_size / 2;
+    const startX = 450 + (token.qr_offset_x - half) * scale;
+    const startY = 450 - (token.qr_offset_y + half) * scale;
+    token.matrix.forEach((row, r) => row.forEach((dark, c) => {
+      if (dark) ctx.fillRect(Math.round(startX + c*pitch), Math.round(startY + r*pitch),
+        Math.round(startX+(c+1)*pitch)-Math.round(startX+c*pitch),
+        Math.round(startY+(r+1)*pitch)-Math.round(startY+r*pitch));
+    }));
+  }
+  const outlines = classic ? token.icon_outlines : token.feature_outlines;
+  for (const outline of outlines) {
     ctx.beginPath();
     outline.forEach(([x, y], index) => {
       const px = 450 + x * scale;

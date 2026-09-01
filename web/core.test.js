@@ -62,6 +62,11 @@ test('rejects invalid URLs, dimensions, colors, and filament assignments', () =>
     { url: 'https://example.com', corner_style: 'scalloped' },
     { url: 'https://example.com', edge_profile: 'ogee' },
     { url: 'https://example.com', edge_size: 3 },
+    { url: 'https://example.com', module_style: 'hearts' },
+    { url: 'https://example.com', finder_style: 'flower' },
+    { url: 'https://example.com', center_icon: 'myspace' },
+    { url: 'https://example.com', module_style: 'dots', center_icon: 'instagram' },
+    { url: 'https://example.com', finder_style: 'rounded', center_icon: 'instagram' },
     { url: 'https://example.com', base_color: '#000000', qr_color: '#FFFFFF' },
     { url: 'https://example.com', base_filament: 1, qr_filament: 1 },
   ]) assert.throws(() => createToken(input, parsed.profile), InputError);
@@ -147,6 +152,37 @@ test('business-card preset right-aligns the QR and supports printable social ico
     const mesh = buildMesh(manifold, token);
     assert.ok(mesh.triangles.length > 0);
     assert.ok(mesh.volume > 0);
+  }
+});
+
+test('print-safe module and finder styles produce printable geometry', () => {
+  for (const module_style of ['square', 'rounded', 'dots', 'faceted']) {
+    for (const finder_style of ['square', 'rounded', 'circle']) {
+      const token = createToken({
+        url: 'https://example.com', diameter: 80, treatment: 'inset', module_style, finder_style,
+      }, parsed.profile);
+      assert.equal(token.module_style, module_style);
+      assert.equal(token.finder_style, finder_style);
+      assert.ok(token.feature_outlines.length > 0);
+      const mesh = buildMesh(manifold, token);
+      assert.ok(mesh.triangles.length > 0);
+      assert.ok(mesh.volume > 0);
+    }
+  }
+});
+
+test('center badges reserve a protected area and force high error correction', () => {
+  for (const center_icon of ['blank', 'instagram', 'x', 'facebook', 'linkedin', 'youtube', 'tiktok']) {
+    const token = createToken({
+      url: 'https://example.com', diameter: 80, treatment: 'inset',
+      module_style: 'square', finder_style: 'square', center_icon, correction: 'M',
+    }, parsed.profile);
+    assert.equal(token.correction, 'H');
+    assert.ok(token.center_span_modules >= 5);
+    assert.equal(token.center_span_modules % 2, 1);
+    assert.equal(token.center_icon_size === 0, center_icon === 'blank');
+    assert.ok(token.warnings.some(warning => warning.includes('High error correction')));
+    assert.ok(buildMesh(manifold, token).volume > 0);
   }
 });
 

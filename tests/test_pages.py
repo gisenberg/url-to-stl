@@ -14,6 +14,9 @@ def test_pages_build_is_the_generator_without_server_routes():
         assert "Small token." not in html
         assert "Business card" in html
         assert "Brand icon" in html
+        assert "QR modules" in html
+        assert "Finder eyes" in html
+        assert "Center badge" in html
         assert "Download Bambu 3MF" in html
         assert "Download for Windows" not in html
         assert "/api/" not in app

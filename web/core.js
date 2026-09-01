@@ -9,6 +9,9 @@ const CORNER_STYLES = new Set(['default', 'sharp', 'softened', 'rounded']);
 const EDGE_PROFILES = new Set(['straight', 'chamfered', 'rounded', 'inset', 'tapered']);
 const TOKEN_PRESETS = new Set(['custom', 'business-card']);
 const TOKEN_ICONS = new Set(['none', 'instagram', 'x', 'facebook', 'linkedin', 'youtube', 'tiktok']);
+const QR_MODULE_STYLES = new Set(['square', 'rounded', 'dots', 'faceted']);
+const QR_FINDER_STYLES = new Set(['square', 'rounded', 'circle']);
+const QR_CENTER_ICONS = new Set(['none', 'blank', 'instagram', 'x', 'facebook', 'linkedin', 'youtube', 'tiktok']);
 
 function number(data, key, fallback, minimum, maximum) {
   const raw = data[key] === undefined || data[key] === '' ? fallback : data[key];
@@ -294,9 +297,115 @@ function iconOutlines(icon, centerX, centerY, size) {
   return outlines;
 }
 
+function roundedRectangleOutline(cx, cy, width, height, radius, segments = 4) {
+  const points = [];
+  const corners = [
+    [cx + width / 2 - radius, cy + height / 2 - radius, 0],
+    [cx - width / 2 + radius, cy + height / 2 - radius, Math.PI / 2],
+    [cx - width / 2 + radius, cy - height / 2 + radius, Math.PI],
+    [cx + width / 2 - radius, cy - height / 2 + radius, Math.PI * 1.5],
+  ];
+  for (const [cornerX, cornerY, start] of corners) {
+    for (let step = 0; step <= segments; step++) {
+      const angle = start + Math.PI / 2 * step / segments;
+      points.push([round(cornerX + radius * Math.cos(angle)), round(cornerY + radius * Math.sin(angle))]);
+    }
+  }
+  return points;
+}
+
+function isFinderCell(row, column, modules) {
+  return (row < 7 && column < 7)
+    || (row < 7 && column >= modules - 7)
+    || (row >= modules - 7 && column < 7);
+}
+
+function finderOutlines(style, left, bottom, pitch) {
+  const outlines = [];
+  const centerX = left + 3.5 * pitch;
+  const centerY = bottom + 3.5 * pitch;
+  if (style === 'circle') {
+    for (let step = 0; step < 32; step++) {
+      const a = Math.PI * 2 * step / 32;
+      const b = Math.PI * 2 * (step + 1) / 32;
+      outlines.push([
+        [centerX + 3.5 * pitch * Math.cos(a), centerY + 3.5 * pitch * Math.sin(a)],
+        [centerX + 3.5 * pitch * Math.cos(b), centerY + 3.5 * pitch * Math.sin(b)],
+        [centerX + 2.5 * pitch * Math.cos(b), centerY + 2.5 * pitch * Math.sin(b)],
+        [centerX + 2.5 * pitch * Math.cos(a), centerY + 2.5 * pitch * Math.sin(a)],
+      ].map(point => point.map(value => round(value))));
+    }
+    outlines.push(circleOutline(centerX, centerY, 1.5 * pitch, 40));
+    return outlines;
+  }
+  if (style === 'rounded') {
+    const stroke = pitch;
+    const radius = pitch * .5;
+    outlines.push(roundedRectangleOutline(centerX, bottom + 6.5 * pitch, 7 * pitch, stroke, radius));
+    outlines.push(roundedRectangleOutline(centerX, bottom + .5 * pitch, 7 * pitch, stroke, radius));
+    outlines.push(roundedRectangleOutline(left + .5 * pitch, centerY, stroke, 5.2 * pitch, radius));
+    outlines.push(roundedRectangleOutline(left + 6.5 * pitch, centerY, stroke, 5.2 * pitch, radius));
+    outlines.push(roundedRectangleOutline(centerX, centerY, 3 * pitch, 3 * pitch, pitch * .55, 6));
+    return outlines;
+  }
+  outlines.push(rectangleOutline(centerX, bottom + 6.5 * pitch, 7 * pitch, pitch));
+  outlines.push(rectangleOutline(centerX, bottom + .5 * pitch, 7 * pitch, pitch));
+  outlines.push(rectangleOutline(left + .5 * pitch, centerY, pitch, 5 * pitch));
+  outlines.push(rectangleOutline(left + 6.5 * pitch, centerY, pitch, 5 * pitch));
+  outlines.push(rectangleOutline(centerX, centerY, 3 * pitch, 3 * pitch));
+  return outlines;
+}
+
+function styledModuleOutline(style, centerX, centerY, pitch) {
+  if (style === 'dots') return circleOutline(centerX, centerY, pitch * .48, 24);
+  if (style === 'faceted') {
+    const radius = pitch * .49;
+    const cut = pitch * .16;
+    return [[centerX + radius - cut, centerY + radius], [centerX - radius + cut, centerY + radius],
+      [centerX - radius, centerY + radius - cut], [centerX - radius, centerY - radius + cut],
+      [centerX - radius + cut, centerY - radius], [centerX + radius - cut, centerY - radius],
+      [centerX + radius, centerY - radius + cut], [centerX + radius, centerY + radius - cut]]
+      .map(point => point.map(value => round(value)));
+  }
+  if (style === 'rounded') {
+    return roundedRectangleOutline(centerX, centerY, pitch * .96, pitch * .96, pitch * .22, 4);
+  }
+  return rectangleOutline(centerX, centerY, pitch, pitch);
+}
+
 function featureOutlines(token) {
+  if (token.feature_outlines) return token.feature_outlines;
   const outlines = [];
   const offset = token.modules * token.module_size / 2;
+  const centerSpan = token.center_icon === 'none' ? 0 : token.center_span_modules;
+  const centerStart = (token.modules - centerSpan) / 2;
+  const centerEnd = centerStart + centerSpan;
+  const styled = token.module_style !== 'square' || token.finder_style !== 'square' || centerSpan;
+  if (styled) {
+    for (let row = 0; row < token.modules; row++) {
+      for (let column = 0; column < token.modules; column++) {
+        if (!token.matrix[row][column] || isFinderCell(row, column, token.modules)) continue;
+        if (row >= centerStart && row < centerEnd && column >= centerStart && column < centerEnd) continue;
+        const centerX = (column + .5) * token.module_size - offset + token.qr_offset_x;
+        const centerY = offset - (row + .5) * token.module_size + token.qr_offset_y;
+        outlines.push(styledModuleOutline(token.module_style, centerX, centerY, token.module_size));
+      }
+    }
+    const finderPositions = [
+      [token.qr_offset_x - offset, token.qr_offset_y + offset - 7 * token.module_size],
+      [token.qr_offset_x + offset - 7 * token.module_size, token.qr_offset_y + offset - 7 * token.module_size],
+      [token.qr_offset_x - offset, token.qr_offset_y - offset],
+    ];
+    for (const [left, bottom] of finderPositions) {
+      outlines.push(...finderOutlines(token.finder_style, left, bottom, token.module_size));
+    }
+    if (!['none', 'blank'].includes(token.center_icon)) {
+      outlines.push(...iconOutlines(token.center_icon, token.qr_offset_x, token.qr_offset_y, token.center_icon_size));
+    }
+    outlines.push(...(token.icon_outlines || iconOutlines(
+      token.icon, token.icon_center_x, token.icon_center_y, token.icon_size)));
+    return outlines;
+  }
   for (let row = 0; row < token.modules; row++) {
     let column = 0;
     while (column < token.modules) {
@@ -349,6 +458,15 @@ export function createToken(data, profile) {
   if (icon !== 'none' && preset !== 'business-card') {
     throw new InputError('Brand icons are available with the business-card preset.');
   }
+  const moduleStyle = data.module_style || 'square';
+  if (!QR_MODULE_STYLES.has(moduleStyle)) throw new InputError('QR module style is not supported.');
+  const finderStyle = data.finder_style || 'square';
+  if (!QR_FINDER_STYLES.has(finderStyle)) throw new InputError('QR finder style is not supported.');
+  const centerIcon = data.center_icon || 'none';
+  if (!QR_CENTER_ICONS.has(centerIcon)) throw new InputError('QR center icon is not supported.');
+  if (centerIcon !== 'none' && (moduleStyle !== 'square' || finderStyle !== 'square')) {
+    throw new InputError('Center badges require classic blocks and square finder eyes for reliable sliced toolpaths.');
+  }
   const maximumLayer = Math.min(0.3, nozzle * 0.75);
   const layerHeight = number(data, 'layer_height', 0.2, 0.08, maximumLayer);
   const firstLayer = number(data, 'first_layer', 0.2, 0.08, maximumLayer);
@@ -366,8 +484,12 @@ export function createToken(data, profile) {
     const feature = treatment === 'inset' ? 'light top field' : 'QR';
     warnings.push(`Heights rounded up to complete layers: ${formatNumber(base)} mm base + ${formatNumber(relief)} mm ${feature}.`);
   }
-  const correction = data.correction || 'M';
+  let correction = data.correction || 'M';
   if (!['M', 'Q', 'H'].includes(correction)) throw new InputError('Error correction must be M, Q, or H.');
+  if (centerIcon !== 'none' && correction !== 'H') {
+    correction = 'H';
+    warnings.push('High error correction is required for a protected center badge.');
+  }
   let qr;
   try {
     qr = QRCode.create(url, { errorCorrectionLevel: correction });
@@ -377,7 +499,8 @@ export function createToken(data, profile) {
   const modules = qr.modules.size;
   const matrix = Array.from({ length: modules }, (_, row) =>
     Array.from({ length: modules }, (_, column) => Boolean(qr.modules.get(row, column))));
-  const minimumModule = Math.max(0.6, nozzle * 2);
+  const styleScale = { square: 1, rounded: .96, dots: .96, faceted: .96 }[moduleStyle];
+  const minimumModule = Math.max(0.6, nozzle * 2) / styleScale;
   const perimeterInset = topProfile === 'straight' ? 0 : topSize;
   let minimumDiameter;
   let minimumHeight;
@@ -463,7 +586,10 @@ export function createToken(data, profile) {
     if (iconSize < 8) throw new InputError('The business-card layout does not have enough room for this icon.');
     iconCenterX = round((panelLeft + panelRight) / 2);
   }
-  return {
+  const centerSpanModules = centerIcon === 'none' ? 0 : Math.max(5, Math.floor(modules * .19) | 1);
+  const centerIconSize = centerIcon === 'none' || centerIcon === 'blank'
+    ? 0 : round(centerSpanModules * moduleSize * .62);
+  const result = {
     url,
     preset,
     shape,
@@ -502,6 +628,11 @@ export function createToken(data, profile) {
     icon_center_y: iconCenterY,
     icon_size: round(iconSize),
     icon_outlines: iconOutlines(icon, iconCenterX, iconCenterY, iconSize),
+    module_style: moduleStyle,
+    finder_style: finderStyle,
+    center_icon: centerIcon,
+    center_span_modules: centerSpanModules,
+    center_icon_size: centerIconSize,
     base_color: baseColor,
     qr_color: qrColor,
     base_filament: filaments[0],
@@ -511,6 +642,8 @@ export function createToken(data, profile) {
     treatment,
     scan_verified: false,
   };
+  result.feature_outlines = featureOutlines(result);
+  return result;
 }
 
 function requiredEntry(archive, name, maximum = 4_000_000) {
@@ -839,6 +972,9 @@ export async function tokenFilename(token) {
   if (token.edge_profile !== 'straight') details.push(token.edge_profile);
   if (token.top_profile !== 'straight') details.push(`top-${token.top_profile}`);
   if (token.icon !== 'none') details.push(token.icon);
+  if (token.module_style !== 'square') details.push(token.module_style);
+  if (token.finder_style !== 'square') details.push(`eyes-${token.finder_style}`);
+  if (token.center_icon !== 'none') details.push(`center-${token.center_icon}`);
   details.push(token.treatment);
   return `qr-${details.join('-')}-${host}-${suffix}`;
 }
@@ -852,8 +988,8 @@ export function encodeBambu3mf(template, profile, token, mesh, filename, pngByte
   const triangleCount = mesh.triangles.length / 3;
   const settings = preparedSettings(template, token);
   const date = new Date().toISOString().slice(0, 10);
-  const partName = `${label(token.shape)} with ${token.edge_profile} lower edge, ${token.top_profile} top edge, and ${token.treatment === 'inset' ? 'inset QR field' : 'raised QR'}`;
-  const rootModel = `<?xml version="1.0" encoding="utf-8"?><model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" unit="millimeter" requiredextensions="p"><metadata name="Application">${xmlEscape(template.application)}</metadata><metadata name="BambuStudio:3mfVersion">1</metadata><metadata name="Title">${xmlEscape(filename)}</metadata><metadata name="CreationDate">${date}</metadata><metadata name="Description">QR Token Studio ${token.shape} with ${token.corner_style} corners, ${token.edge_profile} lower edge, and ${token.top_profile} top edge. ${label(token.treatment)} QR treatment; change before layer ${token.change_layer}, top Z ${formatNumber(token.change_z)} mm.</metadata><resources><object id="2" type="model"><components><component objectid="1" p:path="/3D/Objects/object_1.model" transform="1 0 0 0 1 0 0 0 1 0 0 0"/></components></object></resources><build><item objectid="2" printable="1" transform="1 0 0 0 1 0 0 0 1 ${formatNumber(centerX)} ${formatNumber(centerY)} 0"/></build></model>`;
+  const partName = `${label(token.shape)} with ${token.module_style} QR modules, ${token.finder_style} finder eyes, ${token.edge_profile} lower edge, ${token.top_profile} top edge, and ${token.treatment === 'inset' ? 'inset QR field' : 'raised QR'}`;
+  const rootModel = `<?xml version="1.0" encoding="utf-8"?><model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" unit="millimeter" requiredextensions="p"><metadata name="Application">${xmlEscape(template.application)}</metadata><metadata name="BambuStudio:3mfVersion">1</metadata><metadata name="Title">${xmlEscape(filename)}</metadata><metadata name="CreationDate">${date}</metadata><metadata name="Description">QR Token Studio ${token.shape} with ${token.module_style} QR modules, ${token.finder_style} finder eyes, ${token.corner_style} corners, ${token.edge_profile} lower edge, and ${token.top_profile} top edge. ${label(token.treatment)} QR treatment; change before layer ${token.change_layer}, top Z ${formatNumber(token.change_z)} mm.</metadata><resources><object id="2" type="model"><components><component objectid="1" p:path="/3D/Objects/object_1.model" transform="1 0 0 0 1 0 0 0 1 0 0 0"/></components></object></resources><build><item objectid="2" printable="1" transform="1 0 0 0 1 0 0 0 1 ${formatNumber(centerX)} ${formatNumber(centerY)} 0"/></build></model>`;
   const modelSettings = `<?xml version="1.0" encoding="utf-8"?><config><object id="2">${metadata('name', filename)}${metadata('extruder', token.base_filament)}<metadata face_count="${triangleCount}"/><part id="1" subtype="normal_part">${metadata('name', partName)}${metadata('matrix', '1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1')}<mesh_stat face_count="${triangleCount}" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/></part></object><plate>${metadata('plater_id', 1)}${metadata('plater_name', 'QR Token')}${metadata('locked', 'false')}${metadata('filament_map_mode', 'Manual')}${metadata('gcode_file', '')}${metadata('thumbnail_file', 'Metadata/plate_1.png')}<model_instance>${metadata('object_id', 2)}${metadata('instance_id', 0)}${metadata('identify_id', 1)}</model_instance></plate><assemble/></config>`;
   const events = `<?xml version="1.0" encoding="utf-8"?><custom_gcodes_per_layer><plate><plate_info id="1"/><layer top_z="${formatNumber(token.change_z)}" type="2" extruder="${token.qr_filament}" color="${token.qr_color}" extra="" gcode="tool_change"/><mode value="MultiAsSingle"/></plate></custom_gcodes_per_layer>`;
   const relationships = target => `<?xml version="1.0" encoding="utf-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="${target}" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>`;
@@ -861,6 +997,7 @@ export function encodeBambu3mf(template, profile, token, mesh, filename, pngByte
   const report = { ...token, profile, mesh: { watertight: true, triangles: triangleCount, volume_mm3: round(mesh.volume, 3) } };
   delete report.matrix;
   delete report.outline;
+  delete report.feature_outlines;
   const entries = {
     '[Content_Types].xml': strToU8(contentTypes),
     '_rels/.rels': strToU8(relationships('/3D/3dmodel.model')),

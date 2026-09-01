@@ -44,6 +44,14 @@
           <input id="diameter" name="diameter" type="range" min="40" max="196" step="0.1" value="60">
           <div class="range-labels"><span id="diameter-min">40 mm minimum</span><span id="diameter-max">196 mm maximum</span></div>
           <div id="height-row" hidden><div class="diameter-label"><label for="shape_height">Height</label><output id="height-display" for="shape_height">43.2 <small>mm</small></output></div><input id="shape_height" name="shape_height" type="range" min="30" max="196" step="0.1" value="43.2"><div class="range-labels"><span id="height-min">30 mm minimum</span><span id="height-max">196 mm maximum</span></div></div>
+          <div id="qr-style-panel">
+            <div class="field-grid">
+              <div><label for="module_style">QR modules</label><select id="module_style" name="module_style"><option value="square" selected>Classic blocks</option><option value="rounded">Rounded tiles</option><option value="dots">Dots</option><option value="faceted">Faceted tiles</option></select></div>
+              <div><label for="finder_style">Finder eyes</label><select id="finder_style" name="finder_style"><option value="square" selected>Classic square</option><option value="rounded">Rounded</option><option value="circle">Circular</option></select></div>
+            </div>
+            <label for="center_icon">Center badge</label><select id="center_icon" name="center_icon"><option value="none" selected>No center badge</option><option value="blank">Clear center</option><option value="instagram">Instagram</option><option value="x">X</option><option value="facebook">Facebook</option><option value="linkedin">LinkedIn</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option></select>
+            <p id="center-icon-note" class="field-note">Center badges reserve a protected light area and automatically use high error correction.</p>
+          </div>
           <label for="treatment">QR treatment</label>
           <select id="treatment" name="treatment"><option value="inset" selected>Inset · dark code recessed into a light top</option><option value="raised">Raised · dark code above a light base</option></select>
           <p id="treatment-note" class="field-note">The dark base shows through the QR openings. After one AMS swap, at least five light layers form an opaque top field.</p>

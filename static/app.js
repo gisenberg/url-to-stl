@@ -35,7 +35,7 @@ function setDownloadMenu(open, focus = false) {
   if (show && focus) $('download-3mf-menu').focus();
 }
 function values() {
-  return { ...Object.fromEntries(new FormData(form)), template };
+  return { ...Object.fromEntries(new FormData(form)), correction: $('correction').value, template };
 }
 function measurement(value) {
   return Number(value).toFixed(1).replace(/\.0$/, '');
@@ -96,6 +96,18 @@ function updateFields() {
   $('treatment-note').textContent = inset
     ? 'The dark base shows through the QR openings. After one AMS swap, at least five light layers form an opaque top field.'
     : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
+  const centerBadge = $('center_icon').value !== 'none';
+  $('module_style').disabled = centerBadge;
+  $('finder_style').disabled = centerBadge;
+  if (centerBadge) {
+    $('module_style').value = 'square';
+    $('finder_style').value = 'square';
+  }
+  $('correction').disabled = centerBadge;
+  if (centerBadge) $('correction').value = 'H';
+  $('center-icon-note').textContent = centerBadge
+    ? 'A protected light center is reserved. Classic modules, square finder eyes, and High error correction are locked because that combination survives slicing.'
+    : 'Center badges reserve a protected light area and automatically use high error correction.';
 }
 function applyDiameterLimits(next) {
   const control = $('diameter');
@@ -192,17 +204,21 @@ function drawScan() {
     if (index === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
   });
   ctx.closePath(); ctx.fill();
-  const pitch = token.module_size * scale;
-  const half = token.modules * token.module_size / 2;
-  const startX = 450 + (token.qr_offset_x - half) * scale;
-  const startY = 450 - (token.qr_offset_y + half) * scale;
   ctx.fillStyle = inset ? token.base_color : token.qr_color;
-  token.matrix.forEach((row, r) => row.forEach((dark, c) => {
-    if (dark) ctx.fillRect(Math.round(startX + c*pitch), Math.round(startY + r*pitch),
-      Math.round(startX+(c+1)*pitch)-Math.round(startX+c*pitch),
-      Math.round(startY+(r+1)*pitch)-Math.round(startY+r*pitch));
-  }));
-  for (const outline of token.icon_outlines) {
+  const classic = token.module_style === 'square' && token.finder_style === 'square' && token.center_icon === 'none';
+  if (classic) {
+    const pitch = token.module_size * scale;
+    const half = token.modules * token.module_size / 2;
+    const startX = 450 + (token.qr_offset_x - half) * scale;
+    const startY = 450 - (token.qr_offset_y + half) * scale;
+    token.matrix.forEach((row, r) => row.forEach((dark, c) => {
+      if (dark) ctx.fillRect(Math.round(startX + c*pitch), Math.round(startY + r*pitch),
+        Math.round(startX+(c+1)*pitch)-Math.round(startX+c*pitch),
+        Math.round(startY+(r+1)*pitch)-Math.round(startY+r*pitch));
+    }));
+  }
+  const outlines = classic ? token.icon_outlines : token.feature_outlines;
+  for (const outline of outlines) {
     ctx.beginPath();
     outline.forEach(([x, y], index) => {
       const px = 450 + x * scale;
@@ -355,52 +371,29 @@ function updateModel() {
     new THREE.MeshStandardMaterial({color: token.base_color, roughness: .8, metalness: 0}));
   base.castShadow = true; base.receiveShadow = true; group.add(base);
   const inset = token.treatment === 'inset';
-  const offset = token.modules*token.module_size/2;
+  const pathFromOutline = (outline, ShapeType = THREE.Shape) => {
+    const shape = new ShapeType();
+    outline.forEach(([x, y], index) => {
+      if (index === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
+    });
+    shape.closePath();
+    return shape;
+  };
   if (inset) {
     const topShape = makeTokenShape(token.top_slices.at(-1)[1]);
-    const hole = new THREE.Path();
-    hole.moveTo(token.qr_offset_x-offset, token.qr_offset_y-offset);
-    hole.lineTo(token.qr_offset_x-offset, token.qr_offset_y+offset);
-    hole.lineTo(token.qr_offset_x+offset, token.qr_offset_y+offset);
-    hole.lineTo(token.qr_offset_x+offset, token.qr_offset_y-offset); hole.closePath();
-    topShape.holes.push(hole);
-    for (const outline of token.icon_outlines) {
-      const iconHole = new THREE.Path();
-      outline.forEach(([x, y], index) => {
-        if (index === 0) iconHole.moveTo(x, y); else iconHole.lineTo(x, y);
-      });
-      iconHole.closePath(); topShape.holes.push(iconHole);
-    }
+    for (const outline of token.feature_outlines) topShape.holes.push(pathFromOutline(outline, THREE.Path));
     const ring = new THREE.Mesh(new THREE.ExtrudeGeometry(topShape, {depth: token.relief, bevelEnabled: false, curveSegments: 192}),
       new THREE.MeshStandardMaterial({color: token.qr_color, roughness: .92}));
     ring.rotation.x = -Math.PI/2; ring.position.y = token.base;
     ring.castShadow = true; ring.receiveShadow = true; group.add(ring);
-  }
-  const count = token.matrix.flat().filter(value => inset ? !value : value).length;
-  const blocks = new THREE.InstancedMesh(new THREE.BoxGeometry(token.module_size, token.relief, token.module_size),
-    new THREE.MeshStandardMaterial({color: token.qr_color, roughness: .92}), count);
-  const transform = new THREE.Matrix4();
-  let i = 0;
-  token.matrix.forEach((row, r) => row.forEach((dark, c) => {
-    if (inset ? !dark : dark) {
-      transform.makeTranslation((c+.5)*token.module_size-offset+token.qr_offset_x,
-        token.base+token.relief/2, (r+.5)*token.module_size-offset-token.qr_offset_y);
-      blocks.setMatrixAt(i++, transform);
-    }
-  }));
-  blocks.castShadow = true; blocks.receiveShadow = true; group.add(blocks);
-  if (!inset) {
-    for (const outline of token.icon_outlines) {
-      const iconShape = new THREE.Shape();
-      outline.forEach(([x, y], index) => {
-        if (index === 0) iconShape.moveTo(x, y); else iconShape.lineTo(x, y);
-      });
-      iconShape.closePath();
-      const iconMesh = new THREE.Mesh(
-        new THREE.ExtrudeGeometry(iconShape, {depth: token.relief, bevelEnabled: false}),
-        new THREE.MeshStandardMaterial({color: token.qr_color, roughness: .92}));
-      iconMesh.rotation.x = -Math.PI/2; iconMesh.position.y = token.base;
-      iconMesh.castShadow = true; iconMesh.receiveShadow = true; group.add(iconMesh);
+  } else {
+    const featureMaterial = new THREE.MeshStandardMaterial({color: token.qr_color, roughness: .92});
+    for (const outline of token.feature_outlines) {
+      const featureMesh = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(pathFromOutline(outline), {depth: token.relief, bevelEnabled: false}),
+        featureMaterial);
+      featureMesh.rotation.x = -Math.PI/2; featureMesh.position.y = token.base;
+      featureMesh.castShadow = true; featureMesh.receiveShadow = true; group.add(featureMesh);
     }
   }
   scene.add(group);

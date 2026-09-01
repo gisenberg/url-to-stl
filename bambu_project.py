@@ -173,7 +173,8 @@ def export_project(template, token, mesh):
         (
             "Description",
             f"QR Token Studio {token.shape} with {token.corner_style} corners, a {token.edge_profile} lower edge, "
-            f"and a {token.top_profile} top edge. {token.treatment.title()} QR treatment; "
+            f"a {token.top_profile} top edge, {token.module_style} QR modules, and {token.finder_style} finder eyes. "
+            f"{token.treatment.title()} QR treatment; "
             f"change before layer {token.base_layers + 1}, top Z {token.change_z:g} mm.",
         ),
     ]:
@@ -222,7 +223,8 @@ def export_project(template, token, mesh):
     meta(
         part,
         "name",
-        f"{token.shape.title()} with {token.edge_profile} lower edge, {token.top_profile} top edge, and {feature}",
+        f"{token.shape.title()} with {token.module_style} QR modules, {token.finder_style} finder eyes, "
+        f"{token.edge_profile} lower edge, {token.top_profile} top edge, and {feature}",
     )
     meta(part, "matrix", "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1")
     ET.SubElement(
@@ -289,6 +291,7 @@ def export_project(template, token, mesh):
     report = token.info()
     report.pop("matrix")
     report.pop("outline")
+    report.pop("feature_outlines")
     report["profile"] = profile_info(template)
     report["mesh"] = {"watertight": True, "triangles": len(mesh.faces), "volume_mm3": round(mesh.volume, 3)}
     contents = {

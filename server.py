@@ -161,6 +161,13 @@ def main():
         choices=("none", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"),
         default="none",
     )
+    parser.add_argument("--module-style", choices=("square", "rounded", "dots", "faceted"), default="square")
+    parser.add_argument("--finder-style", choices=("square", "rounded", "circle"), default="square")
+    parser.add_argument(
+        "--center-icon",
+        choices=("none", "blank", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"),
+        default="none",
+    )
     parser.add_argument("--base", type=float, default=1)
     parser.add_argument("--relief", type=float, default=1)
     parser.add_argument("--treatment", choices=("raised", "inset"), default="raised")

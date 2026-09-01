@@ -1,7 +1,7 @@
 {
   "unit_tests": {
-    "python_passed": 92,
-    "browser_core_passed": 13,
+    "python_passed": 116,
+    "browser_core_passed": 15,
     "failed": 0
   },
   "lint": "Ruff and JavaScript syntax checks passed",
@@ -120,6 +120,37 @@
       "browser_3mf_download_verified": true,
       "native_bambu_slice_verified": true
     },
+    "qr_module_styles": [
+      "square",
+      "rounded",
+      "dots",
+      "faceted"
+    ],
+    "qr_finder_styles": [
+      "square",
+      "rounded",
+      "circle"
+    ],
+    "qr_center_badges": [
+      "blank",
+      "instagram",
+      "x",
+      "facebook",
+      "linkedin",
+      "youtube",
+      "tiktok"
+    ],
+    "center_badge_constraints": {
+      "module_style": "square",
+      "finder_style": "square",
+      "correction": "H",
+      "minimum_clear_span_modules": 5
+    },
+    "browser_style_matrix_verified": true,
+    "native_styled_cases": [
+      "styled-square-center-instagram",
+      "styled-faceted-circle"
+    ],
     "independent_rectangle_dimensions": true,
     "top_edge_profiles": [
       "straight",
@@ -128,7 +159,7 @@
       "inset",
       "tapered"
     ],
-    "native_bambu_case_count": 14
+    "native_bambu_case_count": 16
   },
   "physical_print_tested": false
 }

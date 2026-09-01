@@ -126,6 +126,25 @@ def main():
             "business-card-instagram",
             {"treatment": "inset", "preset": "business-card", "icon": "instagram"},
         ),
+        (
+            "styled-square-center-instagram",
+            {
+                "treatment": "inset",
+                "diameter": 80,
+                "module_style": "square",
+                "finder_style": "square",
+                "center_icon": "instagram",
+            },
+        ),
+        (
+            "styled-faceted-circle",
+            {
+                "treatment": "inset",
+                "diameter": 80,
+                "module_style": "faceted",
+                "finder_style": "circle",
+            },
+        ),
         ("different-first-layer", {"layer_height": 0.16}),
         ("reversed-filaments", {"base_filament": 2, "qr_filament": 1}),
     ]

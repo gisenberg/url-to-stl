@@ -163,6 +163,56 @@ def test_business_card_preset_right_aligns_qr_and_prints_social_icons(icon):
     test_printed_top_geometry_decodes_exact_url(token, mesh)
 
 
+@pytest.mark.parametrize("module_style", ["square", "rounded", "dots", "faceted"])
+@pytest.mark.parametrize("finder_style", ["square", "rounded", "circle"])
+def test_print_safe_qr_styles_are_watertight_and_scannable(module_style, finder_style):
+    token = create_token(
+        {
+            "url": "https://example.com",
+            "diameter": 80,
+            "treatment": "inset",
+            "module_style": module_style,
+            "finder_style": finder_style,
+        }
+    )
+    assert token.module_style == module_style
+    assert token.finder_style == finder_style
+    assert token.feature_outlines()
+    mesh = token.mesh()
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+    test_printed_top_geometry_decodes_exact_url(token, mesh)
+
+
+@pytest.mark.parametrize(
+    "center_icon", ["blank", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"]
+)
+def test_center_badges_reserve_space_force_high_correction_and_scan(center_icon):
+    token = create_token(
+        {
+            "url": "https://example.com",
+            "diameter": 80,
+            "treatment": "inset",
+            "module_style": "square",
+            "finder_style": "square",
+            "center_icon": center_icon,
+            "correction": "M",
+        }
+    )
+    assert token.correction == "H"
+    assert token.center_span_modules >= 5
+    assert token.center_span_modules % 2 == 1
+    if center_icon == "blank":
+        assert token.center_icon_size == 0
+    else:
+        assert token.center_icon_size > 0
+    assert any("High error correction" in warning for warning in token.warnings)
+    mesh = token.mesh()
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+    test_printed_top_geometry_decodes_exact_url(token, mesh)
+
+
 @pytest.mark.parametrize("treatment", ["raised", "inset"])
 @pytest.mark.parametrize("top_profile", ["straight", "chamfered", "rounded", "inset", "tapered"])
 def test_top_edge_profiles_are_watertight_and_preserve_scan(treatment, top_profile):
@@ -349,6 +399,11 @@ def test_different_patterns_survive_stl_welding(url, correction):
         {"preset": "credit-card"},
         {"icon": "myspace"},
         {"icon": "instagram"},
+        {"module_style": "hearts"},
+        {"finder_style": "flower"},
+        {"center_icon": "myspace"},
+        {"module_style": "dots", "center_icon": "instagram"},
+        {"finder_style": "rounded", "center_icon": "instagram"},
         {"shape": "rectangle", "shape_height": 10},
     ],
 )
