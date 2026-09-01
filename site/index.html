@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Turn a URL into a circular QR token with an automatic Bambu Studio AMS filament change.">
+  <meta name="theme-color" content="#edf1e4">
+  <meta property="og:title" content="QR Token Studio">
+  <meta property="og:description" content="A free local generator for printable QR tokens and Bambu Studio AMS projects.">
+  <meta property="og:image" content="assets/preview.png">
+  <title>QR Token Studio</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="QR Token Studio home"><span aria-hidden="true">▦</span> QR Token <strong>Studio</strong></a>
+    <nav aria-label="Primary navigation">
+      <a href="#how-it-works">How it works</a>
+      <a href="https://github.com/gisenberg/url-to-stl">Source</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">A LINK YOU CAN HOLD</p>
+        <h1>Small token.<br>One automatic swap.</h1>
+        <p class="lede">Turn any URL into a circular QR token. The Bambu Studio project arrives with the AMS filament change already placed at the first QR layer.</p>
+        <div class="actions">
+          <a class="button primary" href="downloads/qr-token-studio.zip" download>Download for Windows <span aria-hidden="true">↓</span></a>
+          <a class="button secondary" href="examples/qr-example.com-100680ad.3mf" download>Example 3MF</a>
+        </div>
+        <p class="requirements">Free and open source · Python 3.12+ · Runs locally</p>
+      </div>
+      <div class="token-stage" aria-label="QR Token Studio application preview">
+        <div class="stage-label"><span>LOCAL WORKSPACE</span><span>01 / 01</span></div>
+        <div class="token-wrap"><div class="token-shadow"></div><img class="token" src="assets/example-token.png" alt=""></div>
+        <div class="stage-caption"><strong>60 mm</strong><span>2.6 mm total height</span></div>
+      </div>
+    </section>
+
+    <section class="proof" aria-label="Project highlights">
+      <div><strong>1</strong><span>AMS change</span></div>
+      <div><strong>32</strong><span>automated tests</span></div>
+      <div><strong>3MF</strong><span>native Bambu project</span></div>
+      <div><strong>Local</strong><span>no upload or tracking</span></div>
+    </section>
+
+    <section class="feature" id="how-it-works">
+      <div class="section-copy">
+        <p class="eyebrow">THE COMPLETE WORKFLOW</p>
+        <h2>Design, slice, scan.</h2>
+        <p>The generator validates the QR, builds one watertight token, and writes Bambu’s native layer event into the project. You still choose the physical AMS slots in the print dialog.</p>
+      </div>
+      <ol class="steps">
+        <li><span>01</span><div><h3>Enter a URL</h3><p>Choose the diameter, layer heights, relief, colors, and project filaments.</p></div></li>
+        <li><span>02</span><div><h3>Download the 3MF</h3><p>The filament change is saved before the first layer containing QR geometry.</p></div></li>
+        <li><span>03</span><div><h3>Slice and print</h3><p>Open it as a project, map the AMS slots, inspect the preview, and scan the first print.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="app-preview">
+      <div class="preview-copy">
+        <p class="eyebrow">BUILT FOR THE REAL PRINT</p>
+        <h2>See the swap before you slice.</h2>
+        <p>The local workspace previews the token, verifies the encoded URL, rejects QR modules that are too small for the nozzle, and shows the exact change layer and Z height.</p>
+        <ul>
+          <li>Four-module QR quiet zone</li>
+          <li>Contrast and nozzle-size safeguards</li>
+          <li>STL and PNG exports included</li>
+          <li>Custom Bambu project profiles supported</li>
+        </ul>
+      </div>
+      <a class="screenshot" href="assets/preview.png" aria-label="Open full QR Token Studio screenshot">
+        <img src="assets/preview.png" alt="QR Token Studio showing token dimensions, an interactive preview, and the automatic AMS swap layer">
+      </a>
+    </section>
+
+    <section class="download-card">
+      <div><p class="eyebrow">READY TO MAKE ONE?</p><h2>Keep the generator on your computer.</h2><p>Double-click <code>Start.vbs</code>. The first launch installs pinned Python dependencies, then the application works offline.</p></div>
+      <a class="button primary dark" href="downloads/qr-token-studio.zip" download>Download QR Token Studio <span aria-hidden="true">↓</span></a>
+    </section>
+  </main>
+
+  <footer>
+    <span>QR TOKEN STUDIO</span>
+    <p>Open source under the MIT License. Physical printing still requires your own verification.</p>
+    <a href="https://github.com/gisenberg/url-to-stl">GitHub ↗</a>
+  </footer>
+</body>
+</html>

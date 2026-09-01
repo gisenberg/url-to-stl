@@ -4,6 +4,8 @@ A free local generator for circular QR tokens with an automatic Bambu Studio fil
 Enter a URL, set the dimensions, and download a project `.3mf` or a single-solid `.stl`.
 The app never fetches the entered URL, contacts a printer, or uploads a design.
 
+[Project site](https://gisenberg.github.io/url-to-stl/) · [Download the packaged app](https://gisenberg.github.io/url-to-stl/downloads/qr-token-studio.zip)
+
 ## Start
 
 Double-click `Start.vbs` on Windows.
@@ -120,3 +122,10 @@ Physical printing has not been tested.
 
 The server binds only to `127.0.0.1` and rejects cross-origin writes.
 Only open templates you trust, since imported templates supply the printer’s native machine G-code.
+
+## GitHub Pages
+
+The project site is built from `site/` by `.github/workflows/pages.yml` on every push to `main`.
+Unit tests, lint, and formatting checks must pass before the Pages artifact is built.
+The workflow packages the current repository into the downloadable ZIP, copies the validated example and application screenshot, and deploys the resulting static artifact through GitHub Pages.
+The generator itself remains a local Python application because GitHub Pages cannot run its geometry and Bambu project backend.

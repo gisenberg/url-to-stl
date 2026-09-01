@@ -4,3 +4,5 @@ __pycache__/
 .ruff_cache/
 startup.log
 generated/
+_site/
+.pages-build-temp/
