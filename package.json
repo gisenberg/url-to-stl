@@ -1,0 +1,19 @@
+{
+  "name": "qr-token-studio-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:web": "node scripts/build_web.mjs",
+    "test:web": "node --test web/*.test.js",
+    "check:web": "node --check web/app.js && node --check web/core.js && node --check scripts/build_web.mjs"
+  },
+  "dependencies": {
+    "fflate": "0.8.3",
+    "jsqr": "1.4.0",
+    "manifold-3d": "3.5.1",
+    "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -26,16 +26,29 @@ jobs:
           cache: pip
           cache-dependency-path: requirements*.txt
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
       - name: Install test dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm ci
+
+      - name: Build browser bundle
+        run: npm run build:web
 
       - name: Test and lint
         run: |
           python -m pytest -q
           python -m ruff check .
           python -m ruff format --check .
+          npm run test:web
+          npm run check:web
 
-      - name: Build site and downloadable app
+      - name: Assemble static browser app
         run: python scripts/build_pages.py
 
       - name: Configure Pages

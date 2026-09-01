@@ -1,10 +1,13 @@
 {
   "unit_tests": {
-    "passed": 35,
+    "python_passed": 36,
+    "browser_core_passed": 6,
     "failed": 0
   },
-  "lint": "ruff check passed",
+  "lint": "Ruff and JavaScript syntax checks passed",
   "browser": {
+    "entirely_static": true,
+    "api_requests": 0,
     "desktop_width": 1440,
     "compact_width": 504,
     "horizontal_overflow": false,
@@ -26,7 +29,19 @@
       "seo": 100,
       "agentic_browsing": 100
     },
-    "only_loopback_network_requests": true
+    "only_same_origin_static_requests": true,
+    "browser_generated_3mf": {
+      "triangles": 5744,
+      "watertight": true,
+      "connected_faces": 5744,
+      "volume_mm3": 3327.547,
+      "native_bambu_slice": "Success",
+      "filament_changes": 1,
+      "change_layer": 6,
+      "change_z": 1.2,
+      "correct_filament_on_every_model_layer": true,
+      "sliced_toolpaths_decode": "https://example.com"
+    }
   },
   "physical_print_tested": false
 }

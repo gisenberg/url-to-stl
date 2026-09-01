@@ -6,3 +6,5 @@ startup.log
 generated/
 _site/
 .pages-build-temp/
+node_modules/
+web/dist/

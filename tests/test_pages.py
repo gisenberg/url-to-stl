@@ -1,0 +1,26 @@
+import shutil
+
+from scripts.build_pages import ROOT, build
+
+
+def test_pages_build_is_the_generator_without_server_routes():
+    output = ROOT / ".pages-build-test"
+    try:
+        build(output)
+        html = (output / "index.html").read_text(encoding="utf-8")
+        app = (output / "app.js").read_text(encoding="utf-8")
+        assert "BROWSER WORKSPACE" in html
+        assert "Generated entirely in your browser." in html
+        assert "Download Bambu 3MF" in html
+        assert "Download for Windows" not in html
+        assert "/api/" not in app
+        for relative in (
+            "manifold.wasm",
+            "profiles/x2d-04-pla.3mf",
+            "vendor/three.module.js",
+            "licenses/manifold-3d-LICENSE.txt",
+        ):
+            assert (output / relative).is_file()
+    finally:
+        if output.is_dir():
+            shutil.rmtree(output)
