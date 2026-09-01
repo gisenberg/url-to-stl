@@ -57,7 +57,8 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 
 - Four quiet-zone modules on every side fit inside the circle with another 1 mm of radial edge clearance.
 - The diameter is clamped to the minimum that keeps every QR module printable with the selected nozzle.
-- The 3D preview shows the token at real scale on the selected profile’s print bed.
+- Token detail view uses a low camera angle and true depth to make raised or recessed geometry visible.
+- Bed scale view shows the token at real scale on the selected profile’s print bed.
 - The generated preview uses a high-contrast dark QR and light surface.
 - Every browser preview is independently decoded with jsQR before export is enabled.
 - Manifold WebAssembly performs the 2D and 3D boolean operations that produce one watertight connected solid.

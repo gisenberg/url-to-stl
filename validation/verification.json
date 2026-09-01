@@ -21,6 +21,8 @@
       "dense_url_minimum": 53
     },
     "x2d_bed_preview_mm": [256, 256],
+    "default_preview": "token_detail_true_depth",
+    "bed_scale_preview": true,
     "default_base_mm": 1,
     "default_relief_mm": 1,
     "default_treatment": "inset",

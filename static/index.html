@@ -61,8 +61,8 @@
       </section>
       <section class="preview-column" aria-label="Preview and export">
         <div class="preview-card card">
-          <div class="preview-toolbar"><span class="eyebrow">YOUR TOKEN</span><div class="view-toggle" role="group" aria-label="Preview view"><button id="view-3d" class="active" type="button" aria-pressed="true">3D</button><button id="view-top" type="button" aria-pressed="false">Scan view</button></div></div>
-          <div id="viewport"><canvas id="token-canvas" aria-label="Interactive 3D token preview on the printer bed"></canvas><canvas id="scan-canvas" hidden aria-label="Top view of the QR token"></canvas><div id="preview-status" role="status">Preparing your token…</div><span id="bed-reference">X2D BED · 256 × 256 MM</span><span id="orbit-hint">DRAG TO ROTATE · SCROLL TO ZOOM</span><div class="dimension"><span></span><b id="dimension-text">Ø 60 mm</b><span></span></div></div>
+          <div class="preview-toolbar"><span class="eyebrow">YOUR TOKEN</span><div class="view-toggle" role="group" aria-label="Preview view"><button id="view-detail" class="active" type="button" aria-pressed="true">Token detail</button><button id="view-3d" type="button" aria-pressed="false">Bed scale</button><button id="view-top" type="button" aria-pressed="false">Scan view</button></div></div>
+          <div id="viewport"><canvas id="token-canvas" aria-label="Interactive 3D token preview"></canvas><canvas id="scan-canvas" hidden aria-label="Top view of the QR token"></canvas><div id="preview-status" role="status">Preparing your token…</div><span id="bed-reference">INSET DETAIL · 1 MM DEEP</span><span id="orbit-hint">TRUE DEPTH · DRAG TO ROTATE · SCROLL TO ZOOM</span><div class="dimension"><span></span><b id="dimension-text">Ø 60 mm</b><span></span></div></div>
           <div class="metrics"><div><span>QR module</span><strong id="module-metric">—</strong></div><div><span>Total height</span><strong id="height-metric">—</strong></div><div><span>Scan check</span><strong id="scan-metric" class="verified">—</strong></div></div>
         </div>
         <div class="swap-card card">

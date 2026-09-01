@@ -18,7 +18,8 @@ let generation = 0, timer;
 const canvas = $('token-canvas');
 const viewport = $('viewport');
 let renderer, scene, camera, group, bedGroup;
-let azimuth = -.2, elevation = 1.03, distance = 100;
+let viewMode = 'detail';
+let azimuth = -.55, elevation = .42, distance = 110;
 let bedSpan = 256;
 let drag = null;
 const manifoldReady = ManifoldModule({ locateFile: name => new URL(name, import.meta.url).href }).then(module => {
@@ -145,6 +146,7 @@ function setupScene() {
   try {
     renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true});
   } catch {
+    $('view-detail').disabled = true;
     $('view-3d').disabled = true;
     switchView('top');
     return;
@@ -156,13 +158,13 @@ function setupScene() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(35, 1, .1, 1000);
-  scene.add(new THREE.AmbientLight(0xffffff, 2.4));
-  const sun = new THREE.DirectionalLight(0xffffff, 3);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+  const sun = new THREE.DirectionalLight(0xffffff, 4);
   sun.position.set(-40, 80, 45); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -100; sun.shadow.camera.right = 100;
   sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100;
-  sun.shadow.normalBias = .08;
+  sun.shadow.normalBias = .01;
   scene.add(sun);
   const fill = new THREE.DirectionalLight(0xebf2dc, 1.2);
   fill.position.set(40, 25, -50); scene.add(fill);
@@ -183,7 +185,8 @@ function setupScene() {
   canvas.addEventListener('pointercancel', () => {drag = null;});
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
-    distance = Math.max(bedSpan*.75, Math.min(bedSpan*3.2, distance * (e.deltaY > 0 ? 1.08 : .92)));
+    const minimum = viewMode === 'detail' && token ? token.diameter * 1.25 : bedSpan * .75;
+    distance = Math.max(minimum, Math.min(bedSpan*3.2, distance * (e.deltaY > 0 ? 1.08 : .92)));
     render();
   }, {passive: false});
 }
@@ -230,7 +233,7 @@ function updateBed() {
   bedGroup.add(grid);
   scene.add(bedGroup);
   bedSpan = Math.max(profile.bed_width, profile.bed_depth);
-  distance = bedSpan*1.68;
+  if (viewMode === 'bed') distance = bedSpan*1.68;
   $('bed-reference').textContent = `${profile.printer.replace('Bambu Lab ', '')} BED · ${profile.bed_width} × ${profile.bed_depth} MM`;
   render();
 }
@@ -269,7 +272,8 @@ function updateModel() {
   }));
   blocks.castShadow = true; blocks.receiveShadow = true; group.add(blocks);
   scene.add(group);
-  distance = bedSpan * 1.68;
+  distance = viewMode === 'detail' ? Math.max(token.diameter * 1.85, 90) : bedSpan * 1.68;
+  updateViewLabels();
   render();
 }
 function render() {
@@ -279,17 +283,38 @@ function render() {
   camera.aspect = width/height;
   camera.position.set(distance*Math.cos(elevation)*Math.sin(azimuth), distance*Math.sin(elevation),
     distance*Math.cos(elevation)*Math.cos(azimuth));
-  camera.lookAt(0, token ? token.base/2 : 0, 0);
+  camera.lookAt(0, token ? token.height/2 : 0, 0);
   camera.updateProjectionMatrix();
   renderer.render(scene, camera);
 }
 function switchView(view) {
   const top = view === 'top';
+  viewMode = view;
+  if (view === 'detail') {
+    azimuth = -.55; elevation = .42;
+    distance = token ? Math.max(token.diameter * 1.85, 90) : 110;
+  } else if (view === 'bed') {
+    azimuth = -.2; elevation = 1.03; distance = bedSpan * 1.68;
+  }
   canvas.hidden = top; $('scan-canvas').hidden = !top; $('orbit-hint').hidden = top;
   $('bed-reference').hidden = top;
-  $('view-3d').classList.toggle('active', !top); $('view-top').classList.toggle('active', top);
-  $('view-3d').setAttribute('aria-pressed', String(!top)); $('view-top').setAttribute('aria-pressed', String(top));
+  for (const mode of ['detail', '3d', 'top']) {
+    const active = mode === (view === 'bed' ? '3d' : view);
+    $(`view-${mode}`).classList.toggle('active', active);
+    $(`view-${mode}`).setAttribute('aria-pressed', String(active));
+  }
+  updateViewLabels();
   render();
+}
+function updateViewLabels() {
+  if (!profile || !token || viewMode === 'top') return;
+  if (viewMode === 'detail') {
+    $('bed-reference').textContent = `${token.treatment.toUpperCase()} DETAIL · ${token.relief} MM ${token.treatment === 'inset' ? 'DEEP' : 'HIGH'}`;
+    $('orbit-hint').textContent = 'TRUE DEPTH · DRAG TO ROTATE · SCROLL TO ZOOM';
+  } else {
+    $('bed-reference').textContent = `${profile.printer.replace('Bambu Lab ', '')} BED · ${profile.bed_width} × ${profile.bed_depth} MM`;
+    $('orbit-hint').textContent = 'DRAG TO ROTATE · SCROLL TO ZOOM';
+  }
 }
 function showProfile(next) {
   profile = next;
@@ -358,7 +383,8 @@ function saveBlob(blob, filename) {
 
 form.addEventListener('submit', e => {e.preventDefault();});
 form.addEventListener('input', e => {if (e.target.id !== 'template-file') invalidate();});
-$('view-3d').addEventListener('click', () => switchView('3d'));
+$('view-detail').addEventListener('click', () => switchView('detail'));
+$('view-3d').addEventListener('click', () => switchView('bed'));
 $('view-top').addEventListener('click', () => switchView('top'));
 for (const kind of ['3mf', 'stl', 'png']) $(`download-${kind}`).addEventListener('click', () => download(kind));
 $('template-file').addEventListener('change', async () => {
