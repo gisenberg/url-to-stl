@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.3mf binary
+*.png binary
+*.stl binary
+static/vendor/*.js -whitespace

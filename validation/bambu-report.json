@@ -1,0 +1,38 @@
+{
+  "application": "BambuStudio-02.07.01.62",
+  "printer": "Bambu Lab X2D",
+  "cases": [
+    {
+      "case": "standard",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 11,
+      "change_z": 2.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "different-first-layer",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 14,
+      "change_z": 2.28,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "reversed-filaments",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 11,
+      "change_z": 2.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    }
+  ],
+  "physical_print_tested": false,
+  "native_cli_note": "Bambu logs Invalid T command for its own X2D end-of-print T65279 and T65535 commands, also present on the untouched native cube baseline. Slicing returns success. Native machine G-code is preserved."
+}

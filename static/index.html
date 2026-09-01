@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QR Token Studio</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="QR Token Studio home"><span class="brand-icon">▦</span><span>QR Token <strong>Studio</strong></span></a>
+    <span class="local"><i></i> LOCAL WORKSPACE <span class="version">/ 01</span></span>
+  </header>
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow">A LINK YOU CAN HOLD</p><h1>Small token.<br>One automatic swap.</h1><p class="lede">Turn a URL into a circular QR token.<br>Your Bambu project arrives with the AMS layer change built in.</p></div>
+      <div class="intro-note"><span class="mini-token">▦</span><p>Made for the physical world.<br><strong>Generated entirely on your computer.</strong></p></div>
+    </section>
+    <div class="workspace">
+      <section class="controls card" aria-label="Token settings">
+        <form id="settings" novalidate>
+          <div class="section-heading"><span class="step">01</span><h2>The destination</h2></div>
+          <label for="url">Website URL</label>
+          <input id="url" name="url" type="url" value="https://example.com" placeholder="https://your-website.com" autocomplete="off" spellcheck="false">
+          <p class="field-note">Encoded directly. No redirects, accounts, or expiration.</p>
+          <div class="divider"></div>
+          <div class="section-heading"><span class="step">02</span><h2>The token</h2><span class="tag">MILLIMETERS</span></div>
+          <div class="diameter-label"><label for="diameter">Diameter</label><output id="diameter-display" for="diameter">60 <small>mm</small></output></div>
+          <input id="diameter" name="diameter" type="range" min="25" max="120" step="1" value="60">
+          <div class="range-labels"><span>25 mm</span><span>120 mm</span></div>
+          <div class="field-grid">
+            <div><label for="base">Base thickness</label><div class="unit-input"><input id="base" name="base" type="number" min="0.6" max="8" step="0.2" value="2"><span>mm</span></div></div>
+            <div><label for="relief">Raised QR</label><div class="unit-input"><input id="relief" name="relief" type="number" min="0.24" max="2" step="0.02" value="0.6"><span>mm</span></div></div>
+          </div>
+          <div class="color-grid">
+            <label class="color-control" for="base_color"><input id="base_color" name="base_color" type="color" value="#f5f0e5"><span>Light base<small id="base-hex">#F5F0E5</small></span></label>
+            <label class="color-control" for="qr_color"><input id="qr_color" name="qr_color" type="color" value="#181818"><span>Dark QR<small id="qr-hex">#181818</small></span></label>
+          </div>
+          <div class="divider"></div>
+          <div class="section-heading"><span class="step">03</span><h2>The print</h2><span class="tag ams">AMS</span></div>
+          <div class="profile"><span class="printer-icon">▣</span><div><strong id="printer-name">Loading printer profile…</strong><span id="profile-detail">Native Bambu Studio project settings</span></div></div>
+          <div class="field-grid">
+            <div><label for="base_filament">Base filament</label><select id="base_filament" name="base_filament"><option value="1">Filament 1</option><option value="2">Filament 2</option></select></div>
+            <div><label for="qr_filament">QR filament</label><select id="qr_filament" name="qr_filament"><option value="1">Filament 1</option><option value="2" selected>Filament 2</option></select></div>
+          </div>
+          <p class="field-note">Project filament numbers. Choose their physical AMS slots in Bambu’s print dialog.</p>
+          <details id="advanced"><summary>Layer settings &amp; custom profile <span>+</span></summary>
+            <div class="field-grid advanced-fields">
+              <div><label for="layer_height">Layer height</label><select id="layer_height" name="layer_height"><option value="0.08">0.08 mm</option><option value="0.12">0.12 mm</option><option value="0.16">0.16 mm</option><option value="0.2" selected>0.20 mm</option><option value="0.24">0.24 mm</option><option value="0.28">0.28 mm</option></select></div>
+              <div><label for="first_layer">First layer</label><select id="first_layer" name="first_layer"><option value="0.12">0.12 mm</option><option value="0.16">0.16 mm</option><option value="0.2" selected>0.20 mm</option><option value="0.24">0.24 mm</option><option value="0.28">0.28 mm</option></select></div>
+            </div>
+            <label for="correction">QR error correction</label><select id="correction" name="correction"><option value="M">Medium · more room for each QR module</option><option value="Q">Quartile · more redundancy</option><option value="H">High · densest pattern</option></select>
+            <p class="field-note">Heights round up to full layers. A four-module quiet zone is always preserved.</p>
+            <label class="file-label" for="template-file">Import a different Bambu project (.3mf)</label><input id="template-file" type="file" accept=".3mf">
+            <p class="field-note">Use a project with two or more filaments of the same material. Printer, nozzle, and material settings are retained. Token layer settings replace the template’s layer settings.</p>
+            <button type="button" id="reset-profile" class="text-button" hidden>Reset to X2D profile</button>
+          </details>
+        </form>
+      </section>
+      <section class="preview-column" aria-label="Preview and export">
+        <div class="preview-card card">
+          <div class="preview-toolbar"><span class="eyebrow">YOUR TOKEN</span><div class="view-toggle" role="group" aria-label="Preview view"><button id="view-3d" class="active" type="button" aria-pressed="true">3D</button><button id="view-top" type="button" aria-pressed="false">Scan view</button></div></div>
+          <div id="viewport"><canvas id="token-canvas" aria-label="Interactive 3D token preview"></canvas><canvas id="scan-canvas" hidden aria-label="Top view of the QR token"></canvas><div id="preview-status" role="status">Preparing your token…</div><span id="orbit-hint">DRAG TO ROTATE · SCROLL TO ZOOM</span><div class="dimension"><span></span><b id="dimension-text">Ø 60 mm</b><span></span></div></div>
+          <div class="metrics"><div><span>QR module</span><strong id="module-metric">—</strong></div><div><span>Total height</span><strong id="height-metric">—</strong></div><div><span>Scan check</span><strong id="scan-metric" class="verified">—</strong></div></div>
+        </div>
+        <div class="swap-card card">
+          <div class="swap-heading"><div><span class="eyebrow">BUILT INTO YOUR 3MF</span><h2 id="swap-title">Change before layer 11</h2></div><span class="swap-count"><b>1</b> AMS SWAP</span></div>
+          <div class="layer-track"><div id="base-track" class="base-track"><span id="base-track-label">Layers 1–10 · Base</span></div><div id="qr-track" class="qr-track"><span id="qr-track-label">11–13 · QR</span></div></div>
+          <p id="swap-description">Print the light base, switch filament, then print the dark QR.</p>
+        </div>
+        <div id="messages" aria-live="polite"></div>
+        <div class="export-area"><button type="button" id="download-3mf" class="primary" disabled><span>Download Bambu 3MF</span><span aria-hidden="true">↓</span></button><div class="secondary-actions"><button type="button" id="download-stl" disabled>STL geometry</button><span>·</span><button type="button" id="download-png" disabled>QR preview PNG</button></div><p class="export-note">Open as a <strong>project</strong>, slice, and check the preview.<br>The 3MF includes the filament change. STL contains geometry only.</p></div>
+      </section>
+    </div>
+    <footer><span>QR TOKEN STUDIO</span><p>No cloud. No tracking. No printer connection.</p><span>DESIGN → SLICE → SCAN</span></footer>
+  </main>
+</body>
+</html>

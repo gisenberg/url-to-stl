@@ -1,0 +1,20 @@
+{
+  "unit_tests": {
+    "passed": 32,
+    "failed": 0
+  },
+  "lint": "ruff check passed",
+  "browser": {
+    "desktop_width": 1440,
+    "compact_width": 504,
+    "horizontal_overflow": false,
+    "download_3mf_verified": true,
+    "unequal_first_layer": {
+      "change_layer": 14,
+      "change_z": 2.28
+    },
+    "invalid_size_blocks_download": true,
+    "only_loopback_network_requests": true
+  },
+  "physical_print_tested": false
+}
