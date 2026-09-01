@@ -46,6 +46,7 @@ def luminance(hex_color):
 class Token:
     url: str
     diameter: float
+    minimum_diameter: float
     base: float
     relief: float
     layer_height: float
@@ -74,6 +75,7 @@ class Token:
         return {
             "url": self.url,
             "diameter": self.diameter,
+            "minimum_diameter": self.minimum_diameter,
             "base": self.base,
             "relief": self.relief,
             "height": round(self.base + self.relief, 6),
@@ -192,11 +194,11 @@ def create_token(data, nozzle=0.4, filament_count=2):
         raise InputError("Enter a valid HTTP or HTTPS URL.") from error
     if not valid or re.search(r'[<>"{}|\\^`]', url):
         raise InputError("Enter a valid HTTP or HTTPS URL without credentials.")
-    diameter = number(data, "diameter", 60, 25, 200)
+    requested_diameter = number(data, "diameter", 60, 25, 200)
     layer = number(data, "layer_height", 0.2, 0.08, min(0.3, nozzle * 0.75))
     first = number(data, "first_layer", 0.2, 0.08, min(0.3, nozzle * 0.75))
-    requested_base = number(data, "base", 2, 0.6, 8)
-    requested_relief = number(data, "relief", 0.6, 0.24, 2)
+    requested_base = number(data, "base", 1, 0.6, 8)
+    requested_relief = number(data, "relief", 1, 0.24, 2)
     base_layers = max(1, math.ceil((requested_base - first) / layer - 1e-8) + 1)
     qr_layers = max(2, math.ceil(requested_relief / layer - 1e-8))
     base = round(first + (base_layers - 1) * layer, 6)
@@ -215,13 +217,18 @@ def create_token(data, nozzle=0.4, filament_count=2):
         raise InputError("This URL is too long for a QR code.") from error
     matrix = qr.get_matrix()
     # The entire QR plus four-module border fits inside a circle with 1 mm edge clearance.
-    module = (diameter - 2) / (math.sqrt(2) * (len(matrix) + 8))
     min_module = max(0.6, nozzle * 2)
-    suggested = math.ceil(math.sqrt(2) * (len(matrix) + 8) * min_module + 2)
-    if module < min_module:
+    minimum_diameter = math.ceil(math.sqrt(2) * (len(matrix) + 8) * min_module + 2)
+    if minimum_diameter > 200:
         raise InputError(
-            f"This URL needs a token at least {suggested} mm across for a {nozzle:g} mm nozzle. Shorten the URL or increase the diameter."
+            f"This URL needs a token over 200 mm across for a {nozzle:g} mm nozzle. Shorten the URL."
         )
+    diameter = max(requested_diameter, minimum_diameter)
+    if diameter > requested_diameter:
+        warnings.append(
+            f"Diameter increased to {minimum_diameter:g} mm so every QR module is printable with a {nozzle:g} mm nozzle."
+        )
+    module = (diameter - 2) / (math.sqrt(2) * (len(matrix) + 8))
     if module < 1.2:
         warnings.append(
             f"QR modules are {module:.2f} mm wide. Print a scan test; 1.2 mm or larger is more forgiving."
@@ -242,6 +249,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
     token = Token(
         url,
         diameter,
+        minimum_diameter,
         base,
         relief,
         layer,

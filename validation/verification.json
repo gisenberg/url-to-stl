@@ -1,6 +1,6 @@
 {
   "unit_tests": {
-    "passed": 32,
+    "passed": 35,
     "failed": 0
   },
   "lint": "ruff check passed",
@@ -10,10 +10,22 @@
     "horizontal_overflow": false,
     "download_3mf_verified": true,
     "unequal_first_layer": {
-      "change_layer": 14,
-      "change_z": 2.28
+      "change_layer": 7,
+      "change_z": 1.16
     },
-    "invalid_size_blocks_download": true,
+    "diameter_clamp": {
+      "default_minimum": 40,
+      "dense_url_minimum": 53
+    },
+    "x2d_bed_preview_mm": [256, 256],
+    "default_base_mm": 1,
+    "default_relief_mm": 1,
+    "lighthouse_scores": {
+      "accessibility": 100,
+      "best_practices": 100,
+      "seo": 100,
+      "agentic_browsing": 100
+    },
     "only_loopback_network_requests": true
   },
   "physical_print_tested": false

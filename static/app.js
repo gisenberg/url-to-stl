@@ -7,8 +7,9 @@ let session, template = 'default', profile, token, valid = false, exporting = fa
 let generation = 0, timer, controller;
 const canvas = $('token-canvas');
 const viewport = $('viewport');
-let renderer, scene, camera, group;
+let renderer, scene, camera, group, bedGroup;
 let azimuth = -.2, elevation = 1.03, distance = 100;
+let bedSpan = 256;
 let drag = null;
 
 function notice(text, type = '') {
@@ -38,6 +39,19 @@ function updateFields() {
   $('base-hex').textContent = $('base_color').value.toUpperCase();
   $('qr-hex').textContent = $('qr_color').value.toUpperCase();
 }
+function applyDiameterLimits(next) {
+  const control = $('diameter');
+  const minimum = Math.ceil(next.minimum_diameter);
+  const maximum = Math.floor(profile?.max_diameter || 200);
+  control.min = String(minimum);
+  control.max = String(maximum);
+  if (Number(control.value) < minimum || Number(control.value) !== next.diameter) {
+    control.value = String(next.diameter);
+  }
+  $('diameter-min').textContent = `${minimum} mm minimum`;
+  $('diameter-max').textContent = `${maximum} mm maximum`;
+  updateFields();
+}
 function invalidate() {
   enableDownloads(false);
   generation++;
@@ -57,6 +71,7 @@ async function refresh() {
     const next = await response.json();
     if (current !== generation) return;
     token = next;
+    applyDiameterLimits(token);
     $('messages').replaceChildren();
     token.warnings.forEach(w => notice(w));
     $('module-metric').textContent = `${token.module_size.toFixed(2)} mm`;
@@ -131,8 +146,8 @@ function setupScene() {
   scene.add(sun);
   const fill = new THREE.DirectionalLight(0xebf2dc, 1.2);
   fill.position.set(40, 25, -50); scene.add(fill);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.ShadowMaterial({opacity: .10}));
-  floor.rotation.x = -Math.PI / 2; floor.position.y = -.04; floor.receiveShadow = true;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.ShadowMaterial({opacity: .06}));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -.18; floor.receiveShadow = true;
   scene.add(floor);
   new ResizeObserver(render).observe(viewport);
   canvas.addEventListener('pointerdown', e => {
@@ -148,17 +163,60 @@ function setupScene() {
   canvas.addEventListener('pointercancel', () => {drag = null;});
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
-    const d = token?.diameter || 60;
-    distance = Math.max(d*1.4, Math.min(d*5, distance * (e.deltaY > 0 ? 1.08 : .92)));
+    distance = Math.max(bedSpan*.75, Math.min(bedSpan*3.2, distance * (e.deltaY > 0 ? 1.08 : .92)));
     render();
   }, {passive: false});
 }
+function disposeGroup(current) {
+  if (!current) return;
+  current.traverse(obj => {
+    obj.geometry?.dispose();
+    if (Array.isArray(obj.material)) obj.material.forEach(material => material.dispose());
+    else obj.material?.dispose();
+  });
+  scene.remove(current);
+}
+function updateBed() {
+  if (!renderer || !profile?.bed_points?.length) return;
+  disposeGroup(bedGroup);
+  bedGroup = new THREE.Group();
+  const shape = new THREE.Shape();
+  profile.bed_points.forEach(([x, z], index) => {
+    if (index === 0) shape.moveTo(x, z);
+    else shape.lineTo(x, z);
+  });
+  shape.closePath();
+  const plate = new THREE.Mesh(new THREE.ShapeGeometry(shape),
+    new THREE.MeshStandardMaterial({color: 0xdde2d7, roughness: .95, metalness: .04, side: THREE.DoubleSide}));
+  plate.rotation.x = -Math.PI/2; plate.position.y = -.08; plate.receiveShadow = true;
+  bedGroup.add(plate);
+
+  const borderPoints = profile.bed_points.map(([x, z]) => new THREE.Vector3(x, -.055, -z));
+  borderPoints.push(borderPoints[0].clone());
+  const border = new THREE.Line(new THREE.BufferGeometry().setFromPoints(borderPoints),
+    new THREE.LineBasicMaterial({color: 0x899687}));
+  bedGroup.add(border);
+
+  const halfWidth = profile.bed_width/2, halfDepth = profile.bed_depth/2;
+  const gridPoints = [];
+  for (let x = Math.ceil(-halfWidth/20)*20; x < halfWidth; x += 20) {
+    gridPoints.push(new THREE.Vector3(x, -.05, -halfDepth), new THREE.Vector3(x, -.05, halfDepth));
+  }
+  for (let z = Math.ceil(-halfDepth/20)*20; z < halfDepth; z += 20) {
+    gridPoints.push(new THREE.Vector3(-halfWidth, -.05, z), new THREE.Vector3(halfWidth, -.05, z));
+  }
+  const grid = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(gridPoints),
+    new THREE.LineBasicMaterial({color: 0xbcc5b8, transparent: true, opacity: .5}));
+  bedGroup.add(grid);
+  scene.add(bedGroup);
+  bedSpan = Math.max(profile.bed_width, profile.bed_depth);
+  distance = bedSpan*1.68;
+  $('bed-reference').textContent = `${profile.printer.replace('Bambu Lab ', '')} BED · ${profile.bed_width} × ${profile.bed_depth} MM`;
+  render();
+}
 function updateModel() {
   if (!renderer) return;
-  if (group) {
-    group.traverse(obj => {obj.geometry?.dispose(); obj.material?.dispose();});
-    scene.remove(group);
-  }
+  disposeGroup(group);
   group = new THREE.Group();
   const base = new THREE.Mesh(new THREE.CylinderGeometry(token.diameter/2, token.diameter/2, token.base, 192),
     new THREE.MeshStandardMaterial({color: token.base_color, roughness: .8, metalness: 0}));
@@ -178,7 +236,7 @@ function updateModel() {
   }));
   blocks.castShadow = true; blocks.receiveShadow = true; group.add(blocks);
   scene.add(group);
-  distance = token.diameter * 2.25;
+  distance = bedSpan * 1.68;
   render();
 }
 function render() {
@@ -188,13 +246,14 @@ function render() {
   camera.aspect = width/height;
   camera.position.set(distance*Math.cos(elevation)*Math.sin(azimuth), distance*Math.sin(elevation),
     distance*Math.cos(elevation)*Math.cos(azimuth));
-  camera.lookAt(0, token?.base || 0, 0);
+  camera.lookAt(0, token ? token.base/2 : 0, 0);
   camera.updateProjectionMatrix();
   renderer.render(scene, camera);
 }
 function switchView(view) {
   const top = view === 'top';
   canvas.hidden = top; $('scan-canvas').hidden = !top; $('orbit-hint').hidden = top;
+  $('bed-reference').hidden = top;
   $('view-3d').classList.toggle('active', !top); $('view-top').classList.toggle('active', top);
   $('view-3d').setAttribute('aria-pressed', String(!top)); $('view-top').setAttribute('aria-pressed', String(top));
   render();
@@ -208,12 +267,15 @@ function showProfile(next) {
     profile.filaments.forEach((name, i) => select.add(new Option(`Filament ${i+1}`, String(i+1))));
   }
   $('qr_filament').value = '2';
+  $('diameter').max = String(Math.floor(profile.max_diameter));
+  $('diameter-max').textContent = `${Math.floor(profile.max_diameter)} mm maximum`;
   const maxLayer = Math.min(.3, profile.nozzle*.75);
   for (const id of ['layer_height', 'first_layer']) {
     const select = $(id);
     for (const opt of select.options) opt.disabled = Number(opt.value)>maxLayer;
     if (Number(select.value)>maxLayer) select.value = '0.12';
   }
+  updateBed();
 }
 async function download(kind) {
   if (!valid || exporting) return;

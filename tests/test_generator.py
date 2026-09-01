@@ -10,7 +10,7 @@ import trimesh
 import zxingcpp
 from PIL import Image, ImageDraw
 
-from bambu_project import DEFAULT_TEMPLATE, export_project, read_template
+from bambu_project import DEFAULT_TEMPLATE, export_project, profile_info, read_template
 from token_model import InputError, create_token
 
 
@@ -58,7 +58,7 @@ def test_single_solid_geometry_and_stl_roundtrip(token, mesh):
             visited.add(face)
             pending.extend(neighbors[face])
     assert len(visited) == len(mesh.faces)
-    assert np.allclose(mesh.bounds, [[-30, -30, 0], [30, 30, 2.6]])
+    assert np.allclose(mesh.bounds, [[-30, -30, 0], [30, 30, 2]])
     solid = trimesh.load(io.BytesIO(mesh.export(file_type="stl")), file_type="stl")
     assert solid.is_watertight
     assert abs(solid.volume - mesh.volume) < 0.01
@@ -67,6 +67,12 @@ def test_single_solid_geometry_and_stl_roundtrip(token, mesh):
 def test_full_quiet_zone_fits_inside_circle(token):
     half = (len(token.matrix) + 8) * token.module / 2
     assert math.hypot(half, half) <= token.diameter / 2 - 1 + 1e-9
+
+
+def test_default_heights_and_swap_layer(token):
+    assert token.base == token.relief == 1
+    assert token.base_layers == token.qr_layers == 5
+    assert token.change_z == 1.2
 
 
 @pytest.mark.parametrize(
@@ -98,7 +104,7 @@ def test_3mf_contains_tool_change_and_native_printer_settings(template, token, m
         layers = events.findall("./plate/layer")
         assert len(layers) == 1
         assert layers[0].attrib == {
-            "top_z": "2.2",
+            "top_z": "1.2",
             "type": "2",
             "extruder": "2",
             "color": "#181818",
@@ -140,9 +146,20 @@ def test_rejects_nonwebsite_urls(url):
         create_token({"url": url})
 
 
-def test_rejects_modules_too_small():
-    with pytest.raises(InputError, match="at least"):
-        create_token({"url": "https://example.com", "diameter": 25})
+def test_clamps_diameter_to_printable_minimum():
+    token = create_token({"url": "https://example.com", "diameter": 25})
+    assert token.minimum_diameter == token.diameter == 40
+    assert "Diameter increased to 40 mm" in token.warnings[0]
+
+
+def test_minimum_diameter_tracks_qr_density():
+    token = create_token(
+        {
+            "url": "https://www.google.com/maps/place/Space+Needle/@47.6205,-122.3493,17z",
+            "diameter": 40,
+        }
+    )
+    assert token.minimum_diameter == token.diameter == 53
 
 
 def test_preserves_query_payload():
@@ -200,7 +217,10 @@ def test_local_api_security_and_real_download():
         == 403
     )
     assert client.get("/api/config", headers={"Host": "evil.example"}).status_code == 403
-    assert client.post("/api/preview", json=payload, headers=headers).json["change_layer"] == 11
+    preview = client.post("/api/preview", json=payload, headers=headers).json
+    assert preview["change_layer"] == 6
+    assert preview["minimum_diameter"] == 40
+    assert preview["profile"]["bed_width"] == preview["profile"]["bed_depth"] == 256
     response = client.post("/api/export/3mf", json=payload, headers=headers)
     assert response.status_code == 200
     assert ".3mf" in response.headers["Content-Disposition"]
@@ -226,3 +246,10 @@ def test_template_upload_does_not_extract_or_retain_old_objects():
     )
     assert preview.status_code == 200
     assert preview.json["profile"]["printer"] == "Bambu Lab X2D"
+
+
+def test_profile_exposes_centered_bed_outline_and_valid_diameter(template):
+    info = profile_info(template)
+    assert info["bed_width"] == info["bed_depth"] == 256
+    assert info["bed_points"] == [[-128, -128], [128, -128], [128, 128], [-128, 128]]
+    assert info["max_diameter"] == 196

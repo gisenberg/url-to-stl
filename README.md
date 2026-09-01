@@ -31,6 +31,7 @@ Reopening the launcher reuses an existing local instance.
 
 1. Enter the destination URL.
 2. Choose token diameter, base thickness, QR relief, and contrasting colors.
+   The diameter slider starts at the minimum printable size for the current URL and nozzle.
 3. Download **Bambu 3MF**.
 4. Open it **as a project** in Bambu Studio, preserving its settings.
 5. Slice and confirm the preview shows one filament change and a dark QR over a light base.
@@ -51,9 +52,9 @@ The supplied X2D profile is the one validated end to end; other printer profiles
 ## What is automated
 
 The base and QR heights round up to whole layers, taking the first layer’s height into account.
-For a 2 mm base with 0.2 mm first and subsequent layers, layers 1 through 10 print in the base color.
-The automatic tool change is saved before layer 11, whose top Z is **2.2 mm**.
-The QR geometry starts at **2.0 mm**.
+For the default 1 mm base with 0.2 mm first and subsequent layers, layers 1 through 5 print in the base color.
+The automatic tool change is saved before layer 6, whose top Z is **1.2 mm**.
+The QR geometry starts at **1.0 mm** and is 1 mm tall by default.
 That distinction prevents changing the final base layer to the QR color.
 
 The project stores the event in `Metadata/custom_gcode_per_layer.xml` as a `ToolChange` event in `MultiAsSingle` mode.
@@ -68,7 +69,8 @@ The PNG export is a top-view preview, not a replacement for the 3D model.
 ## Geometry and print safeguards
 
 - Four blank QR modules on every side fit inside the circle, with another 1 mm of radial edge clearance.
-- Tiny QR modules are rejected based on the nozzle size, with a suggested minimum token diameter.
+- The diameter is clamped to the minimum that keeps every QR module printable with the selected nozzle.
+- The 3D preview shows the token at real scale on the selected profile’s print bed.
 - The foreground must be darker than the background and pass a contrast check.
 - Every preview is independently decoded with ZXing before export is enabled.
 - Geometry uses a 2D union and a 3D boolean union to produce one watertight solid.
@@ -84,7 +86,7 @@ Shorter URLs give larger QR modules at the same token diameter.
 ## Command line
 
 ```powershell
-.venv\Scripts\python.exe server.py --url https://example.com --diameter 60 --base 2 --relief 0.6 --output generated
+.venv\Scripts\python.exe server.py --url https://example.com --diameter 60 --base 1 --relief 1 --output generated
 ```
 
 This writes matching 3MF, STL, PNG, and JSON metadata files.

@@ -80,6 +80,11 @@ def resolve_input():
         if template is None:
             raise InputError("Template expired. Import it again.")
     token = create_token(data, template["nozzle"], template["filament_count"])
+    maximum = profile_info(template)["max_diameter"]
+    if token.diameter > maximum:
+        raise InputError(
+            f"This URL needs a token larger than the {maximum:g} mm maximum for this print bed. Shorten the URL."
+        )
     return data, template, token
 
 
@@ -135,8 +140,8 @@ def main():
     parser.add_argument("--output", type=Path, default=Path.cwd() / "generated")
     parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
     parser.add_argument("--diameter", type=float, default=60)
-    parser.add_argument("--base", type=float, default=2)
-    parser.add_argument("--relief", type=float, default=0.6)
+    parser.add_argument("--base", type=float, default=1)
+    parser.add_argument("--relief", type=float, default=1)
     parser.add_argument("--layer-height", type=float, default=0.2)
     parser.add_argument("--first-layer", type=float, default=0.2)
     args = parser.parse_args()

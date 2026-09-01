@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Create circular QR tokens and Bambu Studio 3MF projects with an automatic AMS filament change.">
   <title>QR Token Studio</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/style.css">
@@ -28,11 +29,11 @@
           <div class="divider"></div>
           <div class="section-heading"><span class="step">02</span><h2>The token</h2><span class="tag">MILLIMETERS</span></div>
           <div class="diameter-label"><label for="diameter">Diameter</label><output id="diameter-display" for="diameter">60 <small>mm</small></output></div>
-          <input id="diameter" name="diameter" type="range" min="25" max="120" step="1" value="60">
-          <div class="range-labels"><span>25 mm</span><span>120 mm</span></div>
+          <input id="diameter" name="diameter" type="range" min="40" max="196" step="1" value="60">
+          <div class="range-labels"><span id="diameter-min">40 mm minimum</span><span id="diameter-max">196 mm maximum</span></div>
           <div class="field-grid">
-            <div><label for="base">Base thickness</label><div class="unit-input"><input id="base" name="base" type="number" min="0.6" max="8" step="0.2" value="2"><span>mm</span></div></div>
-            <div><label for="relief">Raised QR</label><div class="unit-input"><input id="relief" name="relief" type="number" min="0.24" max="2" step="0.02" value="0.6"><span>mm</span></div></div>
+            <div><label for="base">Base thickness</label><div class="unit-input"><input id="base" name="base" type="number" min="0.6" max="8" step="0.2" value="1"><span>mm</span></div></div>
+            <div><label for="relief">Raised QR</label><div class="unit-input"><input id="relief" name="relief" type="number" min="0.24" max="2" step="0.02" value="1"><span>mm</span></div></div>
           </div>
           <div class="color-grid">
             <label class="color-control" for="base_color"><input id="base_color" name="base_color" type="color" value="#f5f0e5"><span>Light base<small id="base-hex">#F5F0E5</small></span></label>
@@ -62,12 +63,12 @@
       <section class="preview-column" aria-label="Preview and export">
         <div class="preview-card card">
           <div class="preview-toolbar"><span class="eyebrow">YOUR TOKEN</span><div class="view-toggle" role="group" aria-label="Preview view"><button id="view-3d" class="active" type="button" aria-pressed="true">3D</button><button id="view-top" type="button" aria-pressed="false">Scan view</button></div></div>
-          <div id="viewport"><canvas id="token-canvas" aria-label="Interactive 3D token preview"></canvas><canvas id="scan-canvas" hidden aria-label="Top view of the QR token"></canvas><div id="preview-status" role="status">Preparing your token…</div><span id="orbit-hint">DRAG TO ROTATE · SCROLL TO ZOOM</span><div class="dimension"><span></span><b id="dimension-text">Ø 60 mm</b><span></span></div></div>
+          <div id="viewport"><canvas id="token-canvas" aria-label="Interactive 3D token preview on the printer bed"></canvas><canvas id="scan-canvas" hidden aria-label="Top view of the QR token"></canvas><div id="preview-status" role="status">Preparing your token…</div><span id="bed-reference">X2D BED · 256 × 256 MM</span><span id="orbit-hint">DRAG TO ROTATE · SCROLL TO ZOOM</span><div class="dimension"><span></span><b id="dimension-text">Ø 60 mm</b><span></span></div></div>
           <div class="metrics"><div><span>QR module</span><strong id="module-metric">—</strong></div><div><span>Total height</span><strong id="height-metric">—</strong></div><div><span>Scan check</span><strong id="scan-metric" class="verified">—</strong></div></div>
         </div>
         <div class="swap-card card">
-          <div class="swap-heading"><div><span class="eyebrow">BUILT INTO YOUR 3MF</span><h2 id="swap-title">Change before layer 11</h2></div><span class="swap-count"><b>1</b> AMS SWAP</span></div>
-          <div class="layer-track"><div id="base-track" class="base-track"><span id="base-track-label">Layers 1–10 · Base</span></div><div id="qr-track" class="qr-track"><span id="qr-track-label">11–13 · QR</span></div></div>
+          <div class="swap-heading"><div><span class="eyebrow">BUILT INTO YOUR 3MF</span><h2 id="swap-title">Change before layer 6</h2></div><span class="swap-count"><b>1</b> AMS SWAP</span></div>
+          <div class="layer-track"><div id="base-track" class="base-track"><span id="base-track-label">Layers 1–5 · Base</span></div><div id="qr-track" class="qr-track"><span id="qr-track-label">6–10 · QR</span></div></div>
           <p id="swap-description">Print the light base, switch filament, then print the dark QR.</p>
         </div>
         <div id="messages" aria-live="polite"></div>

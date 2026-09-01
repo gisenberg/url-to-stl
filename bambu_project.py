@@ -61,8 +61,25 @@ def read_template(source):
     }
 
 
+def bed_geometry(template):
+    points = template["points"]
+    xs, ys = zip(*points)
+    minimum_x, maximum_x = min(xs), max(xs)
+    minimum_y, maximum_y = min(ys), max(ys)
+    width, depth = maximum_x - minimum_x, maximum_y - minimum_y
+    center_x, center_y = (minimum_x + maximum_x) / 2, (minimum_y + maximum_y) / 2
+    return {
+        "width": width,
+        "depth": depth,
+        "center": (center_x, center_y),
+        "points": [[round(x - center_x, 6), round(y - center_y, 6)] for x, y in points],
+        "max_diameter": max(0, min(width, depth) - 60),
+    }
+
+
 def profile_info(template, name="Bambu project"):
     s = template["settings"]
+    geometry = bed_geometry(template)
     return {
         "name": name,
         "printer": s.get("printer_model", "Bambu Lab"),
@@ -71,6 +88,10 @@ def profile_info(template, name="Bambu project"):
         "filaments": s["filament_settings_id"],
         "filament_count": template["filament_count"],
         "bed": s.get("curr_bed_type", ""),
+        "bed_width": geometry["width"],
+        "bed_depth": geometry["depth"],
+        "bed_points": geometry["points"],
+        "max_diameter": geometry["max_diameter"],
         "application": template["application"],
     }
 
@@ -130,14 +151,12 @@ def prepare_settings(template, token):
 
 
 def export_project(template, token, mesh):
-    points = template["points"]
-    xs, ys = zip(*points)
-    width, depth = max(xs) - min(xs), max(ys) - min(ys)
-    if token.diameter + 60 > min(width, depth):
+    geometry = bed_geometry(template)
+    if token.diameter > geometry["max_diameter"]:
         raise InputError(
-            f"Token is too large for this bed with prime-tower clearance. Maximum diameter: {min(width, depth) - 60:g} mm."
+            f"Token is too large for this bed with prime-tower clearance. Maximum diameter: {geometry['max_diameter']:g} mm."
         )
-    cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+    cx, cy = geometry["center"]
     settings = prepare_settings(template, token)
 
     root = ET.Element(f"{{{CORE}}}model", {"unit": "millimeter", "requiredextensions": "p"})
