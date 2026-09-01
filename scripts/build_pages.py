@@ -36,6 +36,7 @@ def is_packaged(path: Path) -> bool:
 def add_deterministic_file(archive: zipfile.ZipFile, source: Path, destination: Path) -> None:
     info = zipfile.ZipInfo(destination.as_posix(), date_time=(1980, 1, 1, 0, 0, 0))
     info.compress_type = zipfile.ZIP_STORED
+    info.create_system = 3
     info.external_attr = 0o100644 << 16
     data = source.read_bytes()
     if source.suffix.lower() not in BINARY_SUFFIXES:
@@ -73,7 +74,7 @@ def build(output: Path) -> Path:
     downloads.mkdir(exist_ok=True)
     package = downloads / "qr-token-studio.zip"
     with zipfile.ZipFile(package, "w") as archive:
-        for source in sorted(ROOT.rglob("*")):
+        for source in sorted(ROOT.rglob("*"), key=lambda path: path.relative_to(ROOT).as_posix()):
             if source.is_file() and is_packaged(source):
                 destination = Path(ARCHIVE_ROOT) / source.relative_to(ROOT)
                 add_deterministic_file(archive, source, destination)
