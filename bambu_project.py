@@ -167,7 +167,7 @@ def export_project(template, token, mesh):
         ("CreationDate", datetime.now(timezone.utc).date().isoformat()),
         (
             "Description",
-            f"QR Token Studio. Change before layer {token.base_layers + 1}, top Z {token.change_z:g} mm.",
+            f"QR Token Studio {token.treatment} treatment. Change before layer {token.base_layers + 1}, top Z {token.change_z:g} mm.",
         ),
     ]:
         ET.SubElement(root, f"{{{CORE}}}metadata", name=name).text = value
@@ -211,7 +211,7 @@ def export_project(template, token, mesh):
     meta(obj, "extruder", token.base_filament)
     ET.SubElement(obj, "metadata", face_count=str(len(mesh.faces)))
     part = ET.SubElement(obj, "part", id="1", subtype="normal_part")
-    meta(part, "name", "Base and raised QR")
+    meta(part, "name", "Base and raised QR" if token.treatment == "raised" else "Base and inset QR field")
     meta(part, "matrix", "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1")
     ET.SubElement(
         part,

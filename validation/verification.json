@@ -1,7 +1,7 @@
 {
   "unit_tests": {
-    "python_passed": 36,
-    "browser_core_passed": 6,
+    "python_passed": 38,
+    "browser_core_passed": 7,
     "failed": 0
   },
   "lint": "Ruff and JavaScript syntax checks passed",
@@ -23,6 +23,7 @@
     "x2d_bed_preview_mm": [256, 256],
     "default_base_mm": 1,
     "default_relief_mm": 1,
+    "default_treatment": "inset",
     "lighthouse_scores": {
       "accessibility": 100,
       "best_practices": 100,
@@ -31,10 +32,11 @@
     },
     "only_same_origin_static_requests": true,
     "browser_generated_3mf": {
-      "triangles": 5744,
+      "treatment": "inset",
+      "triangles": 7224,
       "watertight": true,
-      "connected_faces": 5744,
-      "volume_mm3": 3327.547,
+      "connected_faces": 7224,
+      "volume_mm3": 5153.902,
       "native_bambu_slice": "Success",
       "filament_changes": 1,
       "change_layer": 6,

@@ -59,6 +59,7 @@ class Token:
     qr_color: str
     warnings: list
     correction: str
+    treatment: str
     base_filament: int
     qr_filament: int
 
@@ -96,17 +97,22 @@ class Token:
             "warnings": self.warnings,
             "filename": self.filename,
             "correction": self.correction,
+            "treatment": self.treatment,
             "scan_verified": True,
         }
 
     def png(self, size=768):
-        """Top view with a continuous light quiet zone inside the circular edge."""
+        """Top view of the selected raised or inverted inset treatment."""
         img = Image.new("RGB", (size, size), "#E7E8E5")
         draw = ImageDraw.Draw(img)
         scale = (size - 32) / self.diameter
         center = size / 2
         r = self.diameter * scale / 2
-        draw.ellipse((center - r, center - r, center + r, center + r), fill=self.base_color)
+        inset = self.treatment == "inset"
+        draw.ellipse(
+            (center - r, center - r, center + r, center + r),
+            fill=self.qr_color if inset else self.base_color,
+        )
         pitch = self.module * scale
         left = center - len(self.matrix) * pitch / 2
         for row, cells in enumerate(self.matrix):
@@ -119,7 +125,7 @@ class Token:
                             round(left + (col + 1) * pitch) - 1,
                             round(left + (row + 1) * pitch) - 1,
                         ),
-                        fill=self.qr_color,
+                        fill=self.base_color if inset else self.qr_color,
                     )
         output = io.BytesIO()
         img.save(output, format="PNG")
@@ -158,11 +164,13 @@ class Token:
                 x, y = start * self.module - offset, offset - (row + 1) * self.module
                 outlines.append([(round(x + u, 6), round(y + v, 6)) for u, v in outline])
         # Union in 2D first so shared row boundaries use a common coordinate grid.
-        relief = (
-            manifold.CrossSection(outlines)
-            .extrude(self.relief + overlap)
-            .translate((0, 0, self.base - overlap))
+        qr_section = manifold.CrossSection(outlines)
+        printable_section = (
+            manifold.CrossSection.circle(self.diameter / 2, circular_segments=256) - qr_section
+            if self.treatment == "inset"
+            else qr_section
         )
+        relief = printable_section.extrude(self.relief + overlap).translate((0, 0, self.base - overlap))
         solid = base_solid + relief
         if solid.status() != manifold.Error.NoError:
             raise RuntimeError(f"Geometry construction failed: {solid.status()}")
@@ -209,6 +217,14 @@ def create_token(data, nozzle=0.4, filament_count=2):
     correction = data.get("correction", "M")
     if correction not in ("M", "Q", "H"):
         raise InputError("Error correction must be M, Q, or H.")
+    treatment = data.get("treatment", "raised")
+    if treatment not in ("raised", "inset"):
+        raise InputError("QR treatment must be raised or inset.")
+    if treatment == "inset":
+        warnings.append(
+            "Inset mode uses an inverted light-on-dark QR. "
+            "Test the physical token with every phone that must scan it."
+        )
     qr = qrcode.QRCode(error_correction=getattr(qrcode.constants, "ERROR_CORRECT_" + correction), border=0)
     qr.add_data(url)
     try:
@@ -262,6 +278,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
         qr_color,
         warnings,
         correction,
+        treatment,
         *slots,
     )
     decoded = zxingcpp.read_barcode(Image.open(io.BytesIO(token.png())))

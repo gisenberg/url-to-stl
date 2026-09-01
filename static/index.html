@@ -31,20 +31,23 @@
           <div class="diameter-label"><label for="diameter">Diameter</label><output id="diameter-display" for="diameter">60 <small>mm</small></output></div>
           <input id="diameter" name="diameter" type="range" min="40" max="196" step="1" value="60">
           <div class="range-labels"><span id="diameter-min">40 mm minimum</span><span id="diameter-max">196 mm maximum</span></div>
+          <label for="treatment">QR treatment</label>
+          <select id="treatment" name="treatment"><option value="inset" selected>Inset · light code recessed into a dark top</option><option value="raised">Raised · dark code above a light base</option></select>
+          <p id="treatment-note" class="field-note">The inverted light QR is recessed to the base while the dark top field prints after one AMS swap.</p>
           <div class="field-grid">
             <div><label for="base">Base thickness</label><div class="unit-input"><input id="base" name="base" type="number" min="0.6" max="8" step="0.2" value="1"><span>mm</span></div></div>
-            <div><label for="relief">Raised QR</label><div class="unit-input"><input id="relief" name="relief" type="number" min="0.24" max="2" step="0.02" value="1"><span>mm</span></div></div>
+            <div><label id="relief-label" for="relief">Inset depth</label><div class="unit-input"><input id="relief" name="relief" type="number" min="0.24" max="2" step="0.02" value="1"><span>mm</span></div></div>
           </div>
           <div class="color-grid">
-            <label class="color-control" for="base_color"><input id="base_color" name="base_color" type="color" value="#f5f0e5"><span>Light base<small id="base-hex">#F5F0E5</small></span></label>
-            <label class="color-control" for="qr_color"><input id="qr_color" name="qr_color" type="color" value="#181818"><span>Dark QR<small id="qr-hex">#181818</small></span></label>
+            <label class="color-control" for="base_color"><input id="base_color" name="base_color" type="color" value="#f5f0e5"><span><b id="base-color-label">Light inset</b><small id="base-hex">#F5F0E5</small></span></label>
+            <label class="color-control" for="qr_color"><input id="qr_color" name="qr_color" type="color" value="#181818"><span><b id="qr-color-label">Dark top field</b><small id="qr-hex">#181818</small></span></label>
           </div>
           <div class="divider"></div>
           <div class="section-heading"><span class="step">03</span><h2>The print</h2><span class="tag ams">AMS</span></div>
           <div class="profile"><span class="printer-icon">▣</span><div><strong id="printer-name">Loading printer profile…</strong><span id="profile-detail">Native Bambu Studio project settings</span></div></div>
           <div class="field-grid">
             <div><label for="base_filament">Base filament</label><select id="base_filament" name="base_filament"><option value="1">Filament 1</option><option value="2">Filament 2</option></select></div>
-            <div><label for="qr_filament">QR filament</label><select id="qr_filament" name="qr_filament"><option value="1">Filament 1</option><option value="2" selected>Filament 2</option></select></div>
+            <div><label id="qr-filament-label" for="qr_filament">Top filament</label><select id="qr_filament" name="qr_filament"><option value="1">Filament 1</option><option value="2" selected>Filament 2</option></select></div>
           </div>
           <p class="field-note">Project filament numbers. Choose their physical AMS slots in Bambu’s print dialog.</p>
           <details id="advanced"><summary>Layer settings &amp; custom profile <span>+</span></summary>

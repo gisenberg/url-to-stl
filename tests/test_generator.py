@@ -64,6 +64,16 @@ def test_single_solid_geometry_and_stl_roundtrip(token, mesh):
     assert abs(solid.volume - mesh.volume) < 0.01
 
 
+def test_inset_geometry_is_connected_watertight_and_scannable():
+    token = create_token({"url": "https://example.com", "treatment": "inset"})
+    mesh = token.mesh()
+    assert token.treatment == "inset"
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+    assert np.allclose(mesh.bounds, [[-30, -30, 0], [30, 30, 2]])
+    test_printed_top_geometry_decodes_exact_url(token, mesh)
+
+
 def test_full_quiet_zone_fits_inside_circle(token):
     half = (len(token.matrix) + 8) * token.module / 2
     assert math.hypot(half, half) <= token.diameter / 2 - 1 + 1e-9
@@ -129,6 +139,18 @@ def test_3mf_contains_tool_change_and_native_printer_settings(template, token, m
         assert "Metadata/plate_1.gcode" not in z.namelist()
         root = ET.fromstring(z.read("Metadata/model_settings.config"))
         assert root.find('./object/metadata[@key="extruder"]').get("value") == "1"
+
+
+def test_inset_3mf_keeps_one_layer_change(template):
+    token = create_token({"url": "https://example.com", "treatment": "inset"})
+    blob = export_project(template, token, token.mesh())
+    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+        layers = ET.fromstring(archive.read("Metadata/custom_gcode_per_layer.xml")).findall("./plate/layer")
+        report = json.loads(archive.read("Metadata/qr_token.json"))
+    assert len(layers) == 1
+    assert layers[0].attrib["top_z"] == "1.2"
+    assert layers[0].attrib["extruder"] == "2"
+    assert report["treatment"] == "inset"
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), None, "bad", -1, 0])

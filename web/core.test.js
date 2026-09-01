@@ -75,6 +75,16 @@ test('builds one watertight manifold and a structurally valid binary STL', () =>
   assert.equal(stl.length, 84 + mesh.triangles.length / 3 * 50);
 });
 
+test('builds an inset QR as one recessed watertight solid', () => {
+  const token = createToken({ url: 'https://example.com', treatment: 'inset' }, parsed.profile);
+  const mesh = buildMesh(manifold, token);
+  assert.equal(token.treatment, 'inset');
+  assert.ok(mesh.triangles.length > 0);
+  assert.ok(mesh.volume > 0);
+  assert.deepEqual(mesh.bounds.min.map(value => Math.round(value)), [-30, -30, 0]);
+  assert.deepEqual(mesh.bounds.max.map(value => Math.round(value)), [30, 30, 2]);
+});
+
 test('packages the native Bambu settings and exactly one layer tool change', async () => {
   const token = createToken({ url: 'https://example.com' }, parsed.profile);
   token.scan_verified = true;

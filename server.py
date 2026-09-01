@@ -142,6 +142,7 @@ def main():
     parser.add_argument("--diameter", type=float, default=60)
     parser.add_argument("--base", type=float, default=1)
     parser.add_argument("--relief", type=float, default=1)
+    parser.add_argument("--treatment", choices=("raised", "inset"), default="raised")
     parser.add_argument("--layer-height", type=float, default=0.2)
     parser.add_argument("--first-layer", type=float, default=0.2)
     args = parser.parse_args()

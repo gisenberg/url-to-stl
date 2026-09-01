@@ -1,6 +1,6 @@
 # QR Token Studio
 
-QR Token Studio is a free browser-based generator for circular QR tokens with an automatic Bambu Studio AMS filament change.
+QR Token Studio is a free browser-based generator for raised or inset circular QR tokens with an automatic Bambu Studio AMS filament change.
 Enter a URL, set the dimensions, and download a Bambu project `.3mf`, watertight `.stl`, or QR preview `.png` directly from the web app.
 The entered URL, imported profile, and generated geometry stay in the browser and are never uploaded.
 
@@ -9,7 +9,7 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 ## Use the web app
 
 1. Enter the destination URL.
-2. Choose the token diameter, base thickness, QR relief, and contrasting colors.
+2. Choose raised or inset treatment, token diameter, base thickness, feature depth, and contrasting colors.
    The diameter slider starts at the minimum printable size for the current URL and nozzle.
 3. Download **Bambu 3MF**.
 4. Open it **as a project** in Bambu Studio so its settings and layer event are retained.
@@ -20,6 +20,8 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 The default profile is Bambu Lab X2D with 0.4 mm standard nozzles, Bambu PLA Matte, and Textured PEI Plate.
 Both project filaments use the main extruder for one AMS swap.
 The app does not assume which physical AMS slots contain your spools because those are selected at print time.
+The web app defaults to an inset treatment that recesses a light inverted QR into a dark top field.
+Choose the raised treatment to print the original dark QR above a light base.
 
 Under **Layer settings & custom profile**, you can import another Bambu Studio project with two or more filaments of the same material.
 The browser reads its printer, nozzle, material, bed, and native machine settings from memory without uploading the file.
@@ -35,7 +37,8 @@ The page makes same-origin requests only for its static JavaScript, WebAssembly,
 The base and QR heights round up to whole layers, taking the first layer height into account.
 For the default 1 mm base with 0.2 mm first and subsequent layers, layers 1 through 5 print in the base color.
 The automatic tool change is saved before layer 6, whose top Z is **1.2 mm**.
-The QR geometry starts at **1.0 mm** and is 1 mm tall by default.
+In raised mode, the dark QR geometry starts at **1.0 mm** and is 1 mm tall by default.
+In inset mode, the dark top field starts at **1.0 mm** and leaves the inverted light QR recessed to the base surface.
 That distinction prevents changing the final base layer to the QR color.
 
 The project stores the event in `Metadata/custom_gcode_per_layer.xml` as a tool change in `MultiAsSingle` mode.
@@ -49,7 +52,7 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 
 ## Geometry and print safeguards
 
-- Four blank QR modules on every side fit inside the circle with another 1 mm of radial edge clearance.
+- Four quiet-zone modules on every side fit inside the circle with another 1 mm of radial edge clearance.
 - The diameter is clamped to the minimum that keeps every QR module printable with the selected nozzle.
 - The 3D preview shows the token at real scale on the selected profile’s print bed.
 - The foreground must be darker than the background and pass a contrast check.
@@ -87,7 +90,7 @@ It is useful for batch generation and cross-checking the browser implementation.
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe server.py --url https://example.com --diameter 60 --base 1 --relief 1 --output generated
+.venv\Scripts\python.exe server.py --url https://example.com --treatment inset --diameter 60 --base 1 --relief 1 --output generated
 ```
 
 Omit the generation arguments to run the Flask workspace at <http://127.0.0.1:8765/>.
@@ -107,7 +110,7 @@ npm run build:web
 ```
 
 The native integration test checks successful slicing, exactly one filament change, correct filament selection on every model layer, and decoding of the actual sliced QR toolpaths.
-The browser-generated default 3MF has also been passed through the installed Bambu Studio CLI and checked for one connected watertight body, one layer change, correct model-layer colors, and a decodable sliced QR.
+Browser-generated raised and inset 3MF projects have also been passed through the installed Bambu Studio CLI and checked for one connected watertight body, one layer change, correct model-layer colors, and decodable sliced QR toolpaths.
 No validation command starts a print job.
 
 Bambu Studio 02.07.01.62 logs `Invalid T command` for the X2D profile’s own end-of-print commands `T65279` and `T65535`, including on an untouched native cube baseline.

@@ -101,6 +101,7 @@ def main():
     results = []
     cases = [
         ("standard", {}),
+        ("inset", {"treatment": "inset"}),
         ("different-first-layer", {"layer_height": 0.16}),
         ("reversed-filaments", {"base_filament": 2, "qr_filament": 1}),
     ]

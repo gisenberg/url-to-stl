@@ -38,6 +38,14 @@ function updateFields() {
   $('diameter-display').innerHTML = `${Number($('diameter').value)} <small>mm</small>`;
   $('base-hex').textContent = $('base_color').value.toUpperCase();
   $('qr-hex').textContent = $('qr_color').value.toUpperCase();
+  const inset = $('treatment').value === 'inset';
+  $('relief-label').textContent = inset ? 'Inset depth' : 'Raised QR';
+  $('base-color-label').textContent = inset ? 'Light inset' : 'Light base';
+  $('qr-color-label').textContent = inset ? 'Dark top field' : 'Dark QR';
+  $('qr-filament-label').textContent = inset ? 'Top filament' : 'QR filament';
+  $('treatment-note').textContent = inset
+    ? 'The inverted light QR is recessed to the base while the dark top field prints after one AMS swap.'
+    : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
 }
 function applyDiameterLimits(next) {
   const control = $('diameter');
@@ -84,8 +92,10 @@ async function refresh() {
     $('base-track').style.background = token.base_color;
     $('qr-track').style.background = token.qr_color;
     $('base-track-label').textContent = `1–${token.base_layers} · Base`;
-    $('qr-track-label').textContent = `${token.change_layer}–${token.base_layers + token.qr_layers} · QR`;
-    $('swap-description').textContent = `Filament ${token.base_filament} → ${token.qr_filament} at Z ${token.change_z} mm (first QR layer). Base ends at ${token.base} mm. No manual pause.`;
+    $('qr-track-label').textContent = `${token.change_layer}–${token.base_layers + token.qr_layers} · ${token.treatment === 'inset' ? 'Top field' : 'QR'}`;
+    $('swap-description').textContent = token.treatment === 'inset'
+      ? `Filament ${token.base_filament} → ${token.qr_filament} at Z ${token.change_z} mm. The dark top field leaves the light QR recessed to ${token.base} mm. No manual pause.`
+      : `Filament ${token.base_filament} → ${token.qr_filament} at Z ${token.change_z} mm (first QR layer). Base ends at ${token.base} mm. No manual pause.`;
     drawScan();
     updateModel();
     $('preview-status').hidden = true;
@@ -110,11 +120,12 @@ function drawScan() {
   target.width = 900; target.height = 900;
   const ctx = target.getContext('2d');
   ctx.clearRect(0, 0, 900, 900);
-  ctx.fillStyle = token.base_color;
+  const inset = token.treatment === 'inset';
+  ctx.fillStyle = inset ? token.qr_color : token.base_color;
   ctx.beginPath(); ctx.arc(450, 450, 435, 0, Math.PI * 2); ctx.fill();
   const pitch = token.module_size * 870 / token.diameter;
   const start = 450 - token.modules * pitch / 2;
-  ctx.fillStyle = token.qr_color;
+  ctx.fillStyle = inset ? token.base_color : token.qr_color;
   token.matrix.forEach((row, r) => row.forEach((dark, c) => {
     if (dark) ctx.fillRect(Math.round(start + c*pitch), Math.round(start + r*pitch),
       Math.round(start+(c+1)*pitch)-Math.round(start+c*pitch),
@@ -221,14 +232,27 @@ function updateModel() {
   const base = new THREE.Mesh(new THREE.CylinderGeometry(token.diameter/2, token.diameter/2, token.base, 192),
     new THREE.MeshStandardMaterial({color: token.base_color, roughness: .8, metalness: 0}));
   base.position.y = token.base/2; base.castShadow = true; base.receiveShadow = true; group.add(base);
-  const count = token.matrix.flat().filter(Boolean).length;
+  const inset = token.treatment === 'inset';
+  const offset = token.modules*token.module_size/2;
+  if (inset) {
+    const topShape = new THREE.Shape();
+    topShape.absarc(0, 0, token.diameter/2, 0, Math.PI*2, false);
+    const hole = new THREE.Path();
+    hole.moveTo(-offset, -offset); hole.lineTo(-offset, offset);
+    hole.lineTo(offset, offset); hole.lineTo(offset, -offset); hole.closePath();
+    topShape.holes.push(hole);
+    const ring = new THREE.Mesh(new THREE.ExtrudeGeometry(topShape, {depth: token.relief, bevelEnabled: false, curveSegments: 192}),
+      new THREE.MeshStandardMaterial({color: token.qr_color, roughness: .92}));
+    ring.rotation.x = -Math.PI/2; ring.position.y = token.base;
+    ring.castShadow = true; ring.receiveShadow = true; group.add(ring);
+  }
+  const count = token.matrix.flat().filter(value => inset ? !value : value).length;
   const blocks = new THREE.InstancedMesh(new THREE.BoxGeometry(token.module_size, token.relief, token.module_size),
     new THREE.MeshStandardMaterial({color: token.qr_color, roughness: .92}), count);
   const transform = new THREE.Matrix4();
-  const offset = token.modules*token.module_size/2;
   let i = 0;
   token.matrix.forEach((row, r) => row.forEach((dark, c) => {
-    if (dark) {
+    if (inset ? !dark : dark) {
       transform.makeTranslation((c+.5)*token.module_size-offset,
         token.base+token.relief/2, (r+.5)*token.module_size-offset);
       blocks.setMatrixAt(i++, transform);
