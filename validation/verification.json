@@ -24,6 +24,10 @@
     "default_base_mm": 1,
     "default_relief_mm": 1,
     "default_treatment": "inset",
+    "color_controls": false,
+    "inset_base_color": "#181818",
+    "inset_top_color": "#F5F0E5",
+    "minimum_inset_top_layers": 5,
     "lighthouse_scores": {
       "accessibility": 100,
       "best_practices": 100,
@@ -33,6 +37,9 @@
     "only_same_origin_static_requests": true,
     "browser_generated_3mf": {
       "treatment": "inset",
+      "base_color": "#181818",
+      "top_color": "#F5F0E5",
+      "light_top_layers": 5,
       "triangles": 7224,
       "watertight": true,
       "connected_faces": 7224,

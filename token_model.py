@@ -102,7 +102,7 @@ class Token:
         }
 
     def png(self, size=768):
-        """Top view of the selected raised or inverted inset treatment."""
+        """Top view of the selected raised or inset treatment."""
         img = Image.new("RGB", (size, size), "#E7E8E5")
         draw = ImageDraw.Draw(img)
         scale = (size - 32) / self.diameter
@@ -205,26 +205,23 @@ def create_token(data, nozzle=0.4, filament_count=2):
     requested_diameter = number(data, "diameter", 60, 25, 200)
     layer = number(data, "layer_height", 0.2, 0.08, min(0.3, nozzle * 0.75))
     first = number(data, "first_layer", 0.2, 0.08, min(0.3, nozzle * 0.75))
+    treatment = data.get("treatment", "raised")
+    if treatment not in ("raised", "inset"):
+        raise InputError("QR treatment must be raised or inset.")
     requested_base = number(data, "base", 1, 0.6, 8)
     requested_relief = number(data, "relief", 1, 0.24, 2)
     base_layers = max(1, math.ceil((requested_base - first) / layer - 1e-8) + 1)
-    qr_layers = max(2, math.ceil(requested_relief / layer - 1e-8))
+    minimum_top_layers = 5 if treatment == "inset" else 2
+    qr_layers = max(minimum_top_layers, math.ceil(requested_relief / layer - 1e-8))
     base = round(first + (base_layers - 1) * layer, 6)
     relief = round(qr_layers * layer, 6)
     warnings = []
     if abs(base - requested_base) > 1e-6 or abs(relief - requested_relief) > 1e-6:
-        warnings.append(f"Heights rounded up to complete layers: {base:g} mm base + {relief:g} mm QR.")
+        feature = "light top field" if treatment == "inset" else "QR"
+        warnings.append(f"Heights rounded up to complete layers: {base:g} mm base + {relief:g} mm {feature}.")
     correction = data.get("correction", "M")
     if correction not in ("M", "Q", "H"):
         raise InputError("Error correction must be M, Q, or H.")
-    treatment = data.get("treatment", "raised")
-    if treatment not in ("raised", "inset"):
-        raise InputError("QR treatment must be raised or inset.")
-    if treatment == "inset":
-        warnings.append(
-            "Inset mode uses an inverted light-on-dark QR. "
-            "Test the physical token with every phone that must scan it."
-        )
     qr = qrcode.QRCode(error_correction=getattr(qrcode.constants, "ERROR_CORRECT_" + correction), border=0)
     qr.add_data(url)
     try:
@@ -249,10 +246,13 @@ def create_token(data, nozzle=0.4, filament_count=2):
         warnings.append(
             f"QR modules are {module:.2f} mm wide. Print a scan test; 1.2 mm or larger is more forgiving."
         )
-    base_color = color(data, "base_color", "#F5F0E5")
-    qr_color = color(data, "qr_color", "#181818")
-    light, dark = luminance(base_color), luminance(qr_color)
+    base_color = color(data, "base_color", "#181818" if treatment == "inset" else "#F5F0E5")
+    qr_color = color(data, "qr_color", "#F5F0E5" if treatment == "inset" else "#181818")
+    light = luminance(qr_color if treatment == "inset" else base_color)
+    dark = luminance(base_color if treatment == "inset" else qr_color)
     if light <= dark or (light + 0.05) / (dark + 0.05) < 4.5:
+        if treatment == "inset":
+            raise InputError("Use a dark base and a light top field with stronger contrast.")
         raise InputError("Use a light base and a dark QR with stronger contrast.")
     slots = []
     for key, default in [("base_filament", 1), ("qr_filament", 2)]:

@@ -65,9 +65,18 @@ def test_single_solid_geometry_and_stl_roundtrip(token, mesh):
 
 
 def test_inset_geometry_is_connected_watertight_and_scannable():
-    token = create_token({"url": "https://example.com", "treatment": "inset"})
+    token = create_token({"url": "https://example.com", "treatment": "inset", "relief": 0.24})
     mesh = token.mesh()
     assert token.treatment == "inset"
+    assert token.base_color == "#181818"
+    assert token.qr_color == "#F5F0E5"
+    assert token.qr_layers == 5
+    assert token.relief == 1
+    variable_layer = create_token(
+        {"url": "https://example.com", "treatment": "inset", "relief": 0.24, "layer_height": 0.28}
+    )
+    assert variable_layer.qr_layers == 5
+    assert variable_layer.relief == 1.4
     assert mesh.is_watertight
     assert mesh.is_winding_consistent
     assert np.allclose(mesh.bounds, [[-30, -30, 0], [30, 30, 2]])

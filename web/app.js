@@ -41,15 +41,12 @@ function values() {
 }
 function updateFields() {
   $('diameter-display').innerHTML = `${Number($('diameter').value)} <small>mm</small>`;
-  $('base-hex').textContent = $('base_color').value.toUpperCase();
-  $('qr-hex').textContent = $('qr_color').value.toUpperCase();
   const inset = $('treatment').value === 'inset';
-  $('relief-label').textContent = inset ? 'Inset depth' : 'Raised QR';
-  $('base-color-label').textContent = inset ? 'Light inset' : 'Light base';
-  $('qr-color-label').textContent = inset ? 'Dark top field' : 'Dark QR';
+  $('relief').min = String(inset ? Math.max(.24, Number($('layer_height').value) * 5) : .24);
+  $('relief-label').textContent = inset ? 'Light cover thickness' : 'Raised QR';
   $('qr-filament-label').textContent = inset ? 'Top filament' : 'QR filament';
   $('treatment-note').textContent = inset
-    ? 'The inverted light QR is recessed to the base while the dark top field prints after one AMS swap.'
+    ? 'The dark base shows through the QR openings. After one AMS swap, at least five light layers form an opaque top field.'
     : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
 }
 function applyDiameterLimits(next) {
@@ -61,6 +58,7 @@ function applyDiameterLimits(next) {
   if (Number(control.value) < minimum || Number(control.value) !== next.diameter) {
     control.value = String(next.diameter);
   }
+  $('relief').value = String(next.relief);
   $('diameter-min').textContent = `${minimum} mm minimum`;
   $('diameter-max').textContent = `${maximum} mm maximum`;
   updateFields();
@@ -93,16 +91,18 @@ async function refresh() {
     $('qr-track').style.flex = token.qr_layers;
     $('base-track').style.background = token.base_color;
     $('qr-track').style.background = token.qr_color;
+    $('base-track').style.color = token.treatment === 'inset' ? '#ffffff' : '#20342b';
+    $('qr-track').style.color = token.treatment === 'inset' ? '#20342b' : '#ffffff';
     $('base-track-label').textContent = `1–${token.base_layers} · Base`;
     $('qr-track-label').textContent = `${token.change_layer}–${token.base_layers + token.qr_layers} · ${token.treatment === 'inset' ? 'Top field' : 'QR'}`;
     $('swap-description').textContent = token.treatment === 'inset'
-      ? `Filament ${token.base_filament} → ${token.qr_filament} at Z ${token.change_z} mm. The dark top field leaves the light QR recessed to ${token.base} mm. No manual pause.`
+      ? `Dark filament ${token.base_filament} → light filament ${token.qr_filament} at Z ${token.change_z} mm. ${token.qr_layers} light layers form the top field around the recessed dark QR. No manual pause.`
       : `Filament ${token.base_filament} → ${token.qr_filament} at Z ${token.change_z} mm (first QR layer). Base ends at ${token.base} mm. No manual pause.`;
     drawScan();
     const scanContext = $('scan-canvas').getContext('2d', { willReadFrequently: true });
     const scan = jsQR(scanContext.getImageData(0, 0, $('scan-canvas').width, $('scan-canvas').height).data,
       $('scan-canvas').width, $('scan-canvas').height,
-      { inversionAttempts: token.treatment === 'inset' ? 'attemptBoth' : 'dontInvert' });
+      { inversionAttempts: 'dontInvert' });
     if (!scan || scan.data !== token.url) throw new Error('The preview failed its independent QR scan check. Increase size or contrast.');
     token.scan_verified = true;
     updateModel();

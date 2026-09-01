@@ -76,9 +76,18 @@ test('builds one watertight manifold and a structurally valid binary STL', () =>
 });
 
 test('builds an inset QR as one recessed watertight solid', () => {
-  const token = createToken({ url: 'https://example.com', treatment: 'inset' }, parsed.profile);
+  const token = createToken({ url: 'https://example.com', treatment: 'inset', relief: 0.24 }, parsed.profile);
   const mesh = buildMesh(manifold, token);
   assert.equal(token.treatment, 'inset');
+  assert.equal(token.base_color, '#181818');
+  assert.equal(token.qr_color, '#F5F0E5');
+  assert.equal(token.qr_layers, 5);
+  assert.equal(token.relief, 1);
+  const variableLayer = createToken({
+    url: 'https://example.com', treatment: 'inset', relief: 0.24, layer_height: 0.28,
+  }, parsed.profile);
+  assert.equal(variableLayer.qr_layers, 5);
+  assert.equal(variableLayer.relief, 1.4);
   assert.ok(mesh.triangles.length > 0);
   assert.ok(mesh.volume > 0);
   assert.deepEqual(mesh.bounds.min.map(value => Math.round(value)), [-30, -30, 0]);

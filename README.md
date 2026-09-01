@@ -9,18 +9,20 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 ## Use the web app
 
 1. Enter the destination URL.
-2. Choose raised or inset treatment, token diameter, base thickness, feature depth, and contrasting colors.
+2. Choose raised or inset treatment, token diameter, base thickness, and feature depth.
    The diameter slider starts at the minimum printable size for the current URL and nozzle.
 3. Download **Bambu 3MF**.
 4. Open it **as a project** in Bambu Studio so its settings and layer event are retained.
-5. Slice and confirm the preview shows one filament change and a dark QR over a light base.
+5. Slice and confirm the preview shows one filament change and a dark QR against a light surface.
 6. Map the two project filaments to the desired physical AMS slots in the print dialog.
 7. Print one token and scan it with your phone before printing a batch.
 
 The default profile is Bambu Lab X2D with 0.4 mm standard nozzles, Bambu PLA Matte, and Textured PEI Plate.
 Both project filaments use the main extruder for one AMS swap.
 The app does not assume which physical AMS slots contain your spools because those are selected at print time.
-The web app defaults to an inset treatment that recesses a light inverted QR into a dark top field.
+The generator uses fixed dark and light preview colors; assign the actual AMS spools and adjust their display colors in Bambu Studio.
+The web app defaults to an inset treatment that prints a dark base first, then adds a light top field around openings that reveal the recessed dark QR.
+The light top field is at least five complete layers thick to cover the dark base reliably.
 Choose the raised treatment to print the original dark QR above a light base.
 
 Under **Layer settings & custom profile**, you can import another Bambu Studio project with two or more filaments of the same material.
@@ -38,7 +40,8 @@ The base and QR heights round up to whole layers, taking the first layer height 
 For the default 1 mm base with 0.2 mm first and subsequent layers, layers 1 through 5 print in the base color.
 The automatic tool change is saved before layer 6, whose top Z is **1.2 mm**.
 In raised mode, the dark QR geometry starts at **1.0 mm** and is 1 mm tall by default.
-In inset mode, the dark top field starts at **1.0 mm** and leaves the inverted light QR recessed to the base surface.
+In inset mode, the dark base ends at **1.0 mm** and the light top field starts after the swap, leaving the dark QR recessed to the base surface.
+The default 1 mm top field provides five light layers at 0.2 mm per layer.
 That distinction prevents changing the final base layer to the QR color.
 
 The project stores the event in `Metadata/custom_gcode_per_layer.xml` as a tool change in `MultiAsSingle` mode.
@@ -55,7 +58,7 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 - Four quiet-zone modules on every side fit inside the circle with another 1 mm of radial edge clearance.
 - The diameter is clamped to the minimum that keeps every QR module printable with the selected nozzle.
 - The 3D preview shows the token at real scale on the selected profile’s print bed.
-- The foreground must be darker than the background and pass a contrast check.
+- The generated preview uses a high-contrast dark QR and light surface.
 - Every browser preview is independently decoded with jsQR before export is enabled.
 - Manifold WebAssembly performs the 2D and 3D boolean operations that produce one watertight connected solid.
 - A 0.01 mm corner relief prevents diagonal QR cells from creating non-manifold edges when an STL reader welds vertices.

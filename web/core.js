@@ -67,23 +67,22 @@ export function createToken(data, profile) {
   const maximumLayer = Math.min(0.3, nozzle * 0.75);
   const layerHeight = number(data, 'layer_height', 0.2, 0.08, maximumLayer);
   const firstLayer = number(data, 'first_layer', 0.2, 0.08, maximumLayer);
+  const treatment = data.treatment || 'raised';
+  if (!['raised', 'inset'].includes(treatment)) throw new InputError('QR treatment must be raised or inset.');
   const requestedBase = number(data, 'base', 1, 0.6, 8);
   const requestedRelief = number(data, 'relief', 1, 0.24, 2);
   const baseLayers = Math.max(1, Math.ceil((requestedBase - firstLayer) / layerHeight - 1e-8) + 1);
-  const qrLayers = Math.max(2, Math.ceil(requestedRelief / layerHeight - 1e-8));
+  const minimumTopLayers = treatment === 'inset' ? 5 : 2;
+  const qrLayers = Math.max(minimumTopLayers, Math.ceil(requestedRelief / layerHeight - 1e-8));
   const base = round(firstLayer + (baseLayers - 1) * layerHeight);
   const relief = round(qrLayers * layerHeight);
   const warnings = [];
   if (Math.abs(base - requestedBase) > 1e-6 || Math.abs(relief - requestedRelief) > 1e-6) {
-    warnings.push(`Heights rounded up to complete layers: ${formatNumber(base)} mm base + ${formatNumber(relief)} mm QR.`);
+    const feature = treatment === 'inset' ? 'light top field' : 'QR';
+    warnings.push(`Heights rounded up to complete layers: ${formatNumber(base)} mm base + ${formatNumber(relief)} mm ${feature}.`);
   }
   const correction = data.correction || 'M';
   if (!['M', 'Q', 'H'].includes(correction)) throw new InputError('Error correction must be M, Q, or H.');
-  const treatment = data.treatment || 'raised';
-  if (!['raised', 'inset'].includes(treatment)) throw new InputError('QR treatment must be raised or inset.');
-  if (treatment === 'inset') {
-    warnings.push('Inset mode uses an inverted light-on-dark QR. Test the physical token with every phone that must scan it.');
-  }
   let qr;
   try {
     qr = QRCode.create(url, { errorCorrectionLevel: correction });
@@ -107,12 +106,14 @@ export function createToken(data, profile) {
   }
   const moduleSize = (diameter - 2) / (SQRT2 * (modules + 8));
   if (moduleSize < 1.2) warnings.push(`QR modules are ${moduleSize.toFixed(2)} mm wide. Print a scan test; 1.2 mm or larger is more forgiving.`);
-  const baseColor = color(data, 'base_color', '#F5F0E5');
-  const qrColor = color(data, 'qr_color', '#181818');
-  const light = luminance(baseColor);
-  const dark = luminance(qrColor);
+  const baseColor = color(data, 'base_color', treatment === 'inset' ? '#181818' : '#F5F0E5');
+  const qrColor = color(data, 'qr_color', treatment === 'inset' ? '#F5F0E5' : '#181818');
+  const light = luminance(treatment === 'inset' ? qrColor : baseColor);
+  const dark = luminance(treatment === 'inset' ? baseColor : qrColor);
   if (light <= dark || (light + 0.05) / (dark + 0.05) < 4.5) {
-    throw new InputError('Use a light base and a dark QR with stronger contrast.');
+    throw new InputError(treatment === 'inset'
+      ? 'Use a dark base and a light top field with stronger contrast.'
+      : 'Use a light base and a dark QR with stronger contrast.');
   }
   const filaments = ['base_filament', 'qr_filament'].map((key, index) => {
     const slot = number(data, key, index + 1, 1, profile.filament_count);
