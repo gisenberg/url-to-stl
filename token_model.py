@@ -43,24 +43,8 @@ def luminance(hex_color):
 
 
 TOKEN_SHAPES = {"circle", "square", "rectangle", "pentagon", "hexagon"}
-
-
-def rounded_rectangle(width, height, radius, segments=8):
-    half_width, half_height = width / 2, height / 2
-    corners = [
-        (half_width - radius, half_height - radius, 0),
-        (-half_width + radius, half_height - radius, math.pi / 2),
-        (-half_width + radius, -half_height + radius, math.pi),
-        (half_width - radius, -half_height + radius, math.pi * 1.5),
-    ]
-    return [
-        (
-            round(cx + radius * math.cos(start + math.pi / 2 * index / segments), 6),
-            round(cy + radius * math.sin(start + math.pi / 2 * index / segments), 6),
-        )
-        for cx, cy, start in corners
-        for index in range(segments + 1)
-    ]
+CORNER_STYLES = {"default", "sharp", "softened", "rounded"}
+EDGE_PROFILES = {"straight", "chamfered", "rounded", "inset", "tapered"}
 
 
 def regular_polygon(sides, width, start_angle):
@@ -74,7 +58,51 @@ def regular_polygon(sides, width, start_angle):
     return [(round((x - center_x) * scale, 6), round((y - center_y) * scale, 6)) for x, y in points]
 
 
-def shape_outline(shape, width):
+def rounded_polygon(points, radius, segments=8):
+    rounded = []
+    for index, point in enumerate(points):
+        previous = points[index - 1]
+        following = points[(index + 1) % len(points)]
+        incoming = (previous[0] - point[0], previous[1] - point[1])
+        outgoing = (following[0] - point[0], following[1] - point[1])
+        incoming_length = math.hypot(*incoming)
+        outgoing_length = math.hypot(*outgoing)
+        incoming = (incoming[0] / incoming_length, incoming[1] / incoming_length)
+        outgoing = (outgoing[0] / outgoing_length, outgoing[1] / outgoing_length)
+        angle = math.acos(max(-1, min(1, incoming[0] * outgoing[0] + incoming[1] * outgoing[1])))
+        tangent = min(radius / math.tan(angle / 2), incoming_length * 0.45, outgoing_length * 0.45)
+        actual_radius = tangent * math.tan(angle / 2)
+        bisector = (incoming[0] + outgoing[0], incoming[1] + outgoing[1])
+        bisector_length = math.hypot(*bisector)
+        center_distance = actual_radius / math.sin(angle / 2)
+        center = (
+            point[0] + bisector[0] / bisector_length * center_distance,
+            point[1] + bisector[1] / bisector_length * center_distance,
+        )
+        start = math.atan2(
+            point[1] + incoming[1] * tangent - center[1], point[0] + incoming[0] * tangent - center[0]
+        )
+        end = math.atan2(
+            point[1] + outgoing[1] * tangent - center[1], point[0] + outgoing[0] * tangent - center[0]
+        )
+        while end <= start:
+            end += math.tau
+        rounded.extend(
+            (
+                round(center[0] + actual_radius * math.cos(start + (end - start) * step / segments), 6),
+                round(center[1] + actual_radius * math.sin(start + (end - start) * step / segments), 6),
+            )
+            for step in range(segments)
+        )
+    return rounded
+
+
+def normalize_outline(outline, width, height):
+    current_width, current_height = outline_dimensions(outline)
+    return [(round(x * width / current_width, 6), round(y * height / current_height, 6)) for x, y in outline]
+
+
+def shape_outline(shape, width, corner_style="default"):
     if shape == "circle":
         return [
             (
@@ -83,14 +111,30 @@ def shape_outline(shape, width):
             )
             for index in range(256)
         ]
-    if shape == "square":
-        return rounded_rectangle(width, width, min(4, width * 0.07))
-    if shape == "rectangle":
-        height = width * 0.72
-        return rounded_rectangle(width, height, min(5, height * 0.1))
-    if shape == "pentagon":
-        return regular_polygon(5, width, math.pi / 2)
-    return regular_polygon(6, width, 0)
+    height = width * 0.72 if shape == "rectangle" else width
+    if shape in ("square", "rectangle"):
+        points = [
+            (width / 2, height / 2),
+            (-width / 2, height / 2),
+            (-width / 2, -height / 2),
+            (width / 2, -height / 2),
+        ]
+    else:
+        points = regular_polygon(
+            5 if shape == "pentagon" else 6, width, math.pi / 2 if shape == "pentagon" else 0
+        )
+    if corner_style == "sharp" or (corner_style == "default" and shape in ("pentagon", "hexagon")):
+        return points
+    if corner_style == "default":
+        radius = min(
+            4 if shape == "square" else 5,
+            (width if shape == "square" else height) * (0.07 if shape == "square" else 0.1),
+        )
+    elif corner_style == "softened":
+        radius = min(1.2, width * 0.03)
+    else:
+        radius = min(4, width * 0.08)
+    return normalize_outline(rounded_polygon(points, radius), width, height)
 
 
 def outline_dimensions(outline):
@@ -98,8 +142,8 @@ def outline_dimensions(outline):
     return round(max(xs) - min(xs), 6), round(max(ys) - min(ys), 6)
 
 
-def module_size_for_shape(shape, width, modules):
-    outline = shape_outline(shape, width)
+def module_size_for_shape(shape, width, modules, corner_style="default"):
+    outline = shape_outline(shape, width, corner_style)
     qr_half = math.inf
     for index, (ax, ay) in enumerate(outline):
         bx, by = outline[(index + 1) % len(outline)]
@@ -111,17 +155,42 @@ def module_size_for_shape(shape, width, modules):
     return max(0, 2 * qr_half / (modules + 8))
 
 
-def minimum_shape_width(shape, modules, minimum_module):
+def minimum_shape_width(shape, modules, minimum_module, corner_style="default"):
     low, high = 25.0, 200.0
-    if module_size_for_shape(shape, high, modules) < minimum_module:
+    if module_size_for_shape(shape, high, modules, corner_style) < minimum_module:
         return math.inf
     for _ in range(48):
         middle = (low + high) / 2
-        if module_size_for_shape(shape, middle, modules) >= minimum_module:
+        if module_size_for_shape(shape, middle, modules, corner_style) >= minimum_module:
             high = middle
         else:
             low = middle
     return math.ceil(high - 1e-7)
+
+
+def edge_slices(profile, size, base):
+    if profile == "straight":
+        return [(0, 0), (base, 0)]
+    if profile == "chamfered":
+        height = min(size, base * 0.8)
+        slices = [(0, size), (height, 0)]
+    elif profile == "rounded":
+        height = min(size, base * 0.8)
+        slices = [
+            (
+                round(height * math.sin(math.pi / 2 * step / 6), 6),
+                round(size * math.cos(math.pi / 2 * step / 6), 6),
+            )
+            for step in range(7)
+        ]
+    elif profile == "inset":
+        height = min(0.4, base * 0.5)
+        slices = [(0, size), (height, size), (height, 0)]
+    else:
+        slices = [(0, size), (base, 0)]
+    if slices[-1][0] < base - 1e-7:
+        slices.append((base, 0))
+    return slices
 
 
 @dataclass
@@ -131,6 +200,10 @@ class Token:
     outline: list
     shape_width: float
     shape_height: float
+    corner_style: str
+    edge_profile: str
+    edge_size: float
+    edge_slices: list
     diameter: float
     minimum_diameter: float
     base: float
@@ -156,7 +229,13 @@ class Token:
     @property
     def filename(self):
         host = re.sub(r"[^a-zA-Z0-9.-]", "-", urlsplit(self.url).hostname or "token")[:48]
-        return f"qr-{self.shape}-{self.treatment}-{host}-{sha256(self.url.encode()).hexdigest()[:8]}"
+        details = [self.shape]
+        if self.corner_style != "default":
+            details.append(self.corner_style)
+        if self.edge_profile != "straight":
+            details.append(self.edge_profile)
+        details.append(self.treatment)
+        return f"qr-{'-'.join(details)}-{host}-{sha256(self.url.encode()).hexdigest()[:8]}"
 
     def info(self):
         return {
@@ -165,6 +244,10 @@ class Token:
             "outline": self.outline,
             "shape_width": self.shape_width,
             "shape_height": self.shape_height,
+            "corner_style": self.corner_style,
+            "edge_profile": self.edge_profile,
+            "edge_size": self.edge_size,
+            "edge_slices": self.edge_slices,
             "diameter": self.diameter,
             "minimum_diameter": self.minimum_diameter,
             "base": self.base,
@@ -221,7 +304,26 @@ class Token:
     def mesh(self):
         """Union row runs into the base, avoiding overlapping STL shells."""
         token_section = manifold.CrossSection([self.outline])
-        base_solid = token_section.extrude(self.base)
+        base_parts = []
+        for (bottom_z, bottom_inset), (top_z, top_inset) in zip(self.edge_slices, self.edge_slices[1:]):
+            if top_z <= bottom_z:
+                continue
+            bottom_scale = (
+                (self.shape_width - 2 * bottom_inset) / self.shape_width,
+                (self.shape_height - 2 * bottom_inset) / self.shape_height,
+            )
+            top_scale = (
+                (self.shape_width - 2 * top_inset) / self.shape_width,
+                (self.shape_height - 2 * top_inset) / self.shape_height,
+            )
+            section = token_section.scale(bottom_scale)
+            base_parts.append(
+                section.extrude(
+                    top_z - bottom_z,
+                    scale_top=(top_scale[0] / bottom_scale[0], top_scale[1] / bottom_scale[1]),
+                ).translate((0, 0, bottom_z))
+            )
+        base_solid = manifold.Manifold.batch_boolean(base_parts, manifold.OpType.Add)
         outlines = []
         n = len(self.matrix)
         offset = n * self.module / 2
@@ -289,6 +391,15 @@ def create_token(data, nozzle=0.4, filament_count=2):
     shape = data.get("shape", "circle")
     if shape not in TOKEN_SHAPES:
         raise InputError("Token shape is not supported.")
+    corner_style = data.get("corner_style", "default")
+    if corner_style not in CORNER_STYLES:
+        raise InputError("Corner treatment is not supported.")
+    if shape == "circle":
+        corner_style = "default"
+    edge_profile = data.get("edge_profile", "straight")
+    if edge_profile not in EDGE_PROFILES:
+        raise InputError("Edge treatment is not supported.")
+    edge_size = number(data, "edge_size", 0.8, 0.4, 2)
     requested_diameter = number(data, "diameter", 60, 25, 200)
     layer = number(data, "layer_height", 0.2, 0.08, min(0.3, nozzle * 0.75))
     first = number(data, "first_layer", 0.2, 0.08, min(0.3, nozzle * 0.75))
@@ -318,7 +429,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
     matrix = qr.get_matrix()
     # The entire QR plus four-module quiet zone fits with 1 mm edge clearance.
     min_module = max(0.6, nozzle * 2)
-    minimum_diameter = minimum_shape_width(shape, len(matrix), min_module)
+    minimum_diameter = minimum_shape_width(shape, len(matrix), min_module, corner_style)
     if minimum_diameter > 200:
         raise InputError(
             f"This URL needs a {shape} token over 200 mm wide for a {nozzle:g} mm nozzle. Shorten the URL."
@@ -328,9 +439,10 @@ def create_token(data, nozzle=0.4, filament_count=2):
         warnings.append(
             f"Width increased to {minimum_diameter:g} mm so every QR module is printable with a {nozzle:g} mm nozzle."
         )
-    outline = shape_outline(shape, diameter)
+    outline = shape_outline(shape, diameter, corner_style)
     shape_width, shape_height = outline_dimensions(outline)
-    module = module_size_for_shape(shape, diameter, len(matrix))
+    module = module_size_for_shape(shape, diameter, len(matrix), corner_style)
+    slices = edge_slices(edge_profile, edge_size, base)
     if module < 1.2:
         warnings.append(
             f"QR modules are {module:.2f} mm wide. Print a scan test; 1.2 mm or larger is more forgiving."
@@ -357,6 +469,10 @@ def create_token(data, nozzle=0.4, filament_count=2):
         outline,
         shape_width,
         shape_height,
+        corner_style,
+        edge_profile,
+        edge_size,
+        slices,
         diameter,
         minimum_diameter,
         base,

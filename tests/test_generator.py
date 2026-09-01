@@ -100,6 +100,41 @@ def test_supported_shapes_are_watertight_scannable_and_printable(shape, minimum_
     test_printed_top_geometry_decodes_exact_url(token, mesh)
 
 
+@pytest.mark.parametrize("edge_profile", ["straight", "chamfered", "rounded", "inset", "tapered"])
+def test_edge_profiles_are_connected_watertight_and_preserve_the_qr(edge_profile):
+    token = create_token(
+        {
+            "url": "https://example.com",
+            "shape": "pentagon",
+            "corner_style": "rounded",
+            "edge_profile": edge_profile,
+            "edge_size": 0.8,
+            "treatment": "inset",
+        }
+    )
+    mesh = token.mesh()
+    assert token.edge_profile == edge_profile
+    assert token.edge_slices[0][0] == 0
+    assert token.edge_slices[-1] == (token.base, 0)
+    assert token.shape_width == pytest.approx(60)
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+    test_printed_top_geometry_decodes_exact_url(token, mesh)
+
+
+@pytest.mark.parametrize("shape", ["square", "rectangle", "pentagon", "hexagon"])
+@pytest.mark.parametrize("corner_style", ["default", "sharp", "softened", "rounded"])
+def test_corner_treatments_preserve_dimensions_and_printability(shape, corner_style):
+    token = create_token(
+        {"url": "https://example.com", "shape": shape, "corner_style": corner_style, "treatment": "inset"}
+    )
+    mesh = token.mesh()
+    assert token.corner_style == corner_style
+    assert token.shape_width == pytest.approx(60)
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+
+
 def test_full_quiet_zone_fits_inside_circle(token):
     half = (len(token.matrix) + 8) * token.module / 2
     assert math.hypot(half, half) <= token.diameter / 2 - 1 + 1e-9
@@ -242,6 +277,9 @@ def test_different_patterns_survive_stl_welding(url, correction):
         {"qr_filament": 1},
         {"base_filament": 1.5},
         {"shape": "triangle"},
+        {"corner_style": "scalloped"},
+        {"edge_profile": "ogee"},
+        {"edge_size": 3},
     ],
 )
 def test_rejects_unscannable_colors_and_bad_filament_assignments(data):

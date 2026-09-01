@@ -46,11 +46,21 @@ function updateFields() {
   $('size-label').textContent = shape === 'circle' ? 'Diameter' : 'Width';
   $('shape-note').textContent = {
     circle: 'The classic round token with the most even edge clearance.',
-    square: 'A compact tile with softened corners that resist chipping.',
+    square: 'A compact tile that uses the available area efficiently.',
     rectangle: 'A landscape badge with extra room beside the QR field.',
     pentagon: 'A directional marker whose top point is easy to orient.',
     hexagon: 'A durable tile that packs and sorts neatly.',
   }[shape];
+  $('corner_style').disabled = shape === 'circle';
+  const edgeProfile = $('edge_profile').value;
+  $('edge_size').disabled = edgeProfile === 'straight';
+  $('edge-note').textContent = {
+    straight: 'A clean vertical perimeter with no lower-edge shaping.',
+    chamfered: 'A flat lower bevel removes the sharp build-plate edge.',
+    rounded: 'A segmented lower radius makes the token more comfortable to handle.',
+    inset: 'A crisp recessed foot creates a shadow line around the token.',
+    tapered: 'The wall angles inward toward the build plate across the full base thickness.',
+  }[edgeProfile];
   const inset = $('treatment').value === 'inset';
   $('relief').min = String(inset ? Math.max(.24, Number($('layer_height').value) * 5) : .24);
   $('relief-label').textContent = inset ? 'Light cover thickness' : 'Raised QR';
@@ -267,11 +277,39 @@ function updateModel() {
     shape.closePath();
     return shape;
   };
-  const base = new THREE.Mesh(new THREE.ExtrudeGeometry(makeTokenShape(), {
-    depth: token.base, bevelEnabled: false, curveSegments: 12,
-  }),
+  const createBaseGeometry = () => {
+    const points = token.outline.map(([x, y]) => new THREE.Vector2(x, y));
+    const triangles = THREE.ShapeUtils.triangulateShape(points, []);
+    const positions = [];
+    const indices = [];
+    for (const [height, inset] of token.edge_slices) {
+      const scaleX = (token.shape_width - 2 * inset) / token.shape_width;
+      const scaleY = (token.shape_height - 2 * inset) / token.shape_height;
+      token.outline.forEach(([x, y]) => positions.push(x * scaleX, height, -y * scaleY));
+    }
+    const count = token.outline.length;
+    triangles.forEach(([a, b, c]) => {
+      indices.push(c, b, a);
+      const top = (token.edge_slices.length - 1) * count;
+      indices.push(top + a, top + b, top + c);
+    });
+    for (let slice = 0; slice < token.edge_slices.length - 1; slice++) {
+      const lower = slice * count;
+      const upper = (slice + 1) * count;
+      for (let point = 0; point < count; point++) {
+        const next = (point + 1) % count;
+        indices.push(lower + point, lower + next, upper + next, lower + point, upper + next, upper + point);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    return geometry;
+  };
+  const base = new THREE.Mesh(createBaseGeometry(),
     new THREE.MeshStandardMaterial({color: token.base_color, roughness: .8, metalness: 0}));
-  base.rotation.x = -Math.PI/2; base.castShadow = true; base.receiveShadow = true; group.add(base);
+  base.castShadow = true; base.receiveShadow = true; group.add(base);
   const inset = token.treatment === 'inset';
   const offset = token.modules*token.module_size/2;
   if (inset) {
@@ -336,7 +374,8 @@ function switchView(view) {
 function updateViewLabels() {
   if (!profile || !token || viewMode === 'top') return;
   if (viewMode === 'detail') {
-    $('bed-reference').textContent = `${token.shape.toUpperCase()} ${token.treatment.toUpperCase()} · ${token.relief} MM ${token.treatment === 'inset' ? 'DEEP' : 'HIGH'}`;
+    const edge = token.edge_profile === 'straight' ? '' : ` · ${token.edge_profile.toUpperCase()} EDGE`;
+    $('bed-reference').textContent = `${token.shape.toUpperCase()} ${token.treatment.toUpperCase()} · ${token.relief} MM ${token.treatment === 'inset' ? 'DEEP' : 'HIGH'}${edge}`;
     $('orbit-hint').textContent = 'TRUE DEPTH · DRAG TO ROTATE · SCROLL TO ZOOM';
   } else {
     $('bed-reference').textContent = `${profile.printer.replace('Bambu Lab ', '')} BED · ${profile.bed_width} × ${profile.bed_depth} MM`;

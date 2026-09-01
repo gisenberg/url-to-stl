@@ -143,6 +143,13 @@ def main():
     parser.add_argument(
         "--shape", choices=("circle", "square", "rectangle", "pentagon", "hexagon"), default="circle"
     )
+    parser.add_argument(
+        "--corner-style", choices=("default", "sharp", "softened", "rounded"), default="default"
+    )
+    parser.add_argument(
+        "--edge-profile", choices=("straight", "chamfered", "rounded", "inset", "tapered"), default="straight"
+    )
+    parser.add_argument("--edge-size", type=float, default=0.8)
     parser.add_argument("--base", type=float, default=1)
     parser.add_argument("--relief", type=float, default=1)
     parser.add_argument("--treatment", choices=("raised", "inset"), default="raised")

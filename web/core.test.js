@@ -58,6 +58,9 @@ test('rejects invalid URLs, dimensions, colors, and filament assignments', () =>
     { url: 'https://user:secret@example.com' },
     { url: 'https://example.com', diameter: Number.NaN },
     { url: 'https://example.com', shape: 'triangle' },
+    { url: 'https://example.com', corner_style: 'scalloped' },
+    { url: 'https://example.com', edge_profile: 'ogee' },
+    { url: 'https://example.com', edge_size: 3 },
     { url: 'https://example.com', base_color: '#000000', qr_color: '#FFFFFF' },
     { url: 'https://example.com', base_filament: 1, qr_filament: 1 },
   ]) assert.throws(() => createToken(input, parsed.profile), InputError);
@@ -111,6 +114,35 @@ test('builds every supported token shape as printable watertight geometry', () =
     assert.ok(token.shape_height <= token.shape_width + 1e-5);
     assert.ok(mesh.triangles.length > 0);
     assert.ok(mesh.volume > 0);
+  }
+});
+
+test('builds every edge profile as one printable solid without changing the QR surface', () => {
+  for (const edge_profile of ['straight', 'chamfered', 'rounded', 'inset', 'tapered']) {
+    const token = createToken({
+      url: 'https://example.com', shape: 'pentagon', corner_style: 'rounded', edge_profile,
+      edge_size: .8, treatment: 'inset',
+    }, parsed.profile);
+    const mesh = buildMesh(manifold, token);
+    assert.equal(token.edge_profile, edge_profile);
+    assert.deepEqual(token.edge_slices[0][0], 0);
+    assert.deepEqual(token.edge_slices.at(-1), [token.base, 0]);
+    assert.equal(token.shape_width, 60);
+    assert.ok(mesh.triangles.length > 0);
+    assert.ok(mesh.volume > 0);
+  }
+});
+
+test('corner treatments preserve the requested envelope and printable geometry', () => {
+  for (const shape of ['square', 'rectangle', 'pentagon', 'hexagon']) {
+    for (const corner_style of ['default', 'sharp', 'softened', 'rounded']) {
+      const token = createToken({ url: 'https://example.com', shape, corner_style }, parsed.profile);
+      const mesh = buildMesh(manifold, token);
+      assert.equal(token.corner_style, corner_style);
+      assert.equal(token.shape_width, 60);
+      assert.ok(mesh.triangles.length > 0);
+      assert.ok(mesh.volume > 0);
+    }
   }
 });
 

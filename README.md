@@ -10,7 +10,7 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 ## Use the web app
 
 1. Enter the destination URL.
-2. Choose the token shape, raised or inset treatment, overall width, base thickness, and feature depth.
+2. Choose the token shape, corner treatment, edge treatment, raised or inset QR treatment, overall width, base thickness, and feature depth.
    The size slider starts at the shape-specific minimum printable width for the current URL and nozzle.
 3. Download **Bambu 3MF**.
 4. Open it **as a project** in Bambu Studio so its settings and layer event are retained.
@@ -58,6 +58,9 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 
 - Four quiet-zone modules on every side fit inside every shape with another 1 mm of edge clearance.
 - The overall width is clamped to the shape-specific minimum that keeps every QR module printable with the selected nozzle.
+- Corner treatments include shape default, sharp, softened, and rounded.
+- Edge treatments include a straight wall, chamfered foot, rounded foot, stepped inset, and a full-height taper angled inward toward the build plate.
+- Edge shaping stays within the base layers so it does not change the QR surface or AMS transition.
 - Token detail view uses a low camera angle and true depth to make raised or recessed geometry visible.
 - Bed scale view shows the token at real scale on the selected profile’s print bed.
 - The generated preview uses a high-contrast dark QR and light surface.
@@ -95,7 +98,7 @@ It is useful for batch generation and cross-checking the browser implementation.
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe server.py --url https://example.com --shape hexagon --treatment inset --diameter 60 --base 1 --relief 1 --output generated
+.venv\Scripts\python.exe server.py --url https://example.com --shape hexagon --corner-style rounded --edge-profile chamfered --edge-size 0.8 --treatment inset --diameter 60 --base 1 --relief 1 --output generated
 ```
 
 Omit the generation arguments to run the Flask workspace at <http://127.0.0.1:8765/>.
@@ -114,7 +117,7 @@ npm run build:web
 .venv\Scripts\python.exe tests\validate_bambu.py --workdir ..\..\work\bambu-validation --report validation\bambu-report.json
 ```
 
-The native integration test checks every supported inset shape for successful slicing, exactly one filament change, correct filament selection on every model layer, and decoding of the actual sliced QR toolpaths.
+The native integration test checks every supported inset shape and edge treatment for successful slicing, exactly one filament change, correct filament selection on every model layer, and decoding of the actual sliced QR toolpaths.
 Browser-generated raised and inset 3MF projects have also been passed through the installed Bambu Studio CLI and checked for one connected watertight body, one layer change, correct model-layer colors, and decodable sliced QR toolpaths.
 No validation command starts a print job.
 

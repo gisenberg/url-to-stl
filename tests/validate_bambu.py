@@ -106,6 +106,18 @@ def main():
         ("inset-rectangle", {"treatment": "inset", "shape": "rectangle"}),
         ("inset-pentagon", {"treatment": "inset", "shape": "pentagon"}),
         ("inset-hexagon", {"treatment": "inset", "shape": "hexagon"}),
+        (
+            "rounded-corners-chamfered-edge",
+            {
+                "treatment": "inset",
+                "shape": "pentagon",
+                "corner_style": "rounded",
+                "edge_profile": "chamfered",
+            },
+        ),
+        ("rounded-edge", {"treatment": "inset", "shape": "square", "edge_profile": "rounded"}),
+        ("stepped-inset-edge", {"treatment": "inset", "shape": "hexagon", "edge_profile": "inset"}),
+        ("tapered-edge", {"treatment": "inset", "shape": "rectangle", "edge_profile": "tapered"}),
         ("different-first-layer", {"layer_height": 0.16}),
         ("reversed-filaments", {"base_filament": 2, "qr_filament": 1}),
     ]

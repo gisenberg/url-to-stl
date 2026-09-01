@@ -63,6 +63,46 @@
       "correct_filament_on_every_model_layer": true
     },
     {
+      "case": "rounded-corners-chamfered-edge",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "rounded-edge",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "stepped-inset-edge",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "tapered-edge",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
       "case": "different-first-layer",
       "bambu_result": "Success",
       "filament_changes": 1,

@@ -29,8 +29,14 @@
           <div class="divider"></div>
           <div class="section-heading"><span class="step">02</span><h2>The token</h2><span class="tag">MILLIMETERS</span></div>
           <label for="shape">Token shape</label>
-          <select id="shape" name="shape"><option value="circle" selected>Circle · classic coin</option><option value="square">Square · softened corners</option><option value="rectangle">Rectangle · landscape badge</option><option value="pentagon">Pentagon · distinctive marker</option><option value="hexagon">Hexagon · durable tile</option></select>
+          <select id="shape" name="shape"><option value="circle" selected>Circle · classic coin</option><option value="square">Square · compact tile</option><option value="rectangle">Rectangle · landscape badge</option><option value="pentagon">Pentagon · distinctive marker</option><option value="hexagon">Hexagon · durable tile</option></select>
           <p id="shape-note" class="field-note">The classic round token with the most even edge clearance.</p>
+          <div class="field-grid">
+            <div><label for="corner_style">Corner treatment</label><select id="corner_style" name="corner_style"><option value="default" selected>Shape default</option><option value="sharp">Sharp</option><option value="softened">Softened</option><option value="rounded">Rounded</option></select></div>
+            <div><label for="edge_profile">Edge treatment</label><select id="edge_profile" name="edge_profile"><option value="straight" selected>Straight wall</option><option value="chamfered">Chamfered foot</option><option value="rounded">Rounded foot</option><option value="inset">Stepped inset</option><option value="tapered">Angled inward</option></select></div>
+          </div>
+          <div id="edge-size-row"><label for="edge_size">Edge depth</label><div class="unit-input compact-unit"><input id="edge_size" name="edge_size" type="number" min="0.4" max="2" step="0.2" value="0.8" disabled><span>mm</span></div></div>
+          <p id="edge-note" class="field-note">A clean vertical perimeter with no lower-edge shaping.</p>
           <div class="diameter-label"><label id="size-label" for="diameter">Diameter</label><output id="diameter-display" for="diameter">60 <small>mm</small></output></div>
           <input id="diameter" name="diameter" type="range" min="40" max="196" step="1" value="60">
           <div class="range-labels"><span id="diameter-min">40 mm minimum</span><span id="diameter-max">196 mm maximum</span></div>

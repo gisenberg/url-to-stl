@@ -1,7 +1,7 @@
 {
   "unit_tests": {
-    "python_passed": 44,
-    "browser_core_passed": 8,
+    "python_passed": 68,
+    "browser_core_passed": 10,
     "failed": 0
   },
   "lint": "Ruff and JavaScript syntax checks passed",
@@ -44,6 +44,19 @@
       "pentagon",
       "hexagon"
     ],
+    "corner_treatments": [
+      "default",
+      "sharp",
+      "softened",
+      "rounded"
+    ],
+    "native_bambu_edge_profiles": [
+      "straight",
+      "chamfered",
+      "rounded",
+      "inset",
+      "tapered"
+    ],
     "lighthouse_scores": {
       "accessibility": 100,
       "best_practices": 100,
@@ -53,16 +66,19 @@
     "only_same_origin_static_requests": true,
     "browser_generated_3mf": {
       "treatment": "inset",
-      "shape": "pentagon",
+      "shape": "square",
       "shape_width": 60,
-      "shape_height": 57.06339,
+      "shape_height": 60,
+      "corner_style": "rounded",
+      "edge_profile": "tapered",
+      "edge_size": 0.8,
       "base_color": "#181818",
       "top_color": "#F5F0E5",
       "light_top_layers": 5,
-      "triangles": 4674,
+      "triangles": 4890,
       "watertight": true,
-      "connected_faces": 4674,
-      "volume_mm3": 4434.166,
+      "connected_faces": 4890,
+      "volume_mm3": 6120.507,
       "native_bambu_slice": "Success",
       "filament_changes": 1,
       "change_layer": 6,
