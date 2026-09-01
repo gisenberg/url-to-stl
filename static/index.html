@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Create shaped QR tokens and Bambu Studio 3MF projects with an automatic AMS filament change.">
+  <meta name="description" content="Create raised, inset, flat, and two-piece QR tokens as Bambu Studio AMS-ready 3MF projects.">
   <title>QR Token Studio</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/style.css">
@@ -53,11 +53,12 @@
             <p id="center-icon-note" class="field-note">Center badges reserve a protected light area and automatically use high error correction.</p>
           </div>
           <label for="treatment">QR treatment</label>
-          <select id="treatment" name="treatment"><option value="inset" selected>Inset · dark code recessed into a light top</option><option value="raised">Raised · dark code above a light base</option></select>
+          <select id="treatment" name="treatment"><option value="inset" selected>Inset · dark code recessed into a light top</option><option value="raised">Raised · dark code above a light base</option><option value="flat">Flat · dark code flush with a light face</option></select>
           <p id="treatment-note" class="field-note">The dark base shows through the QR openings. After one AMS swap, at least five light layers form an opaque top field.</p>
+          <div id="construction-row"><label for="construction">Inset construction</label><select id="construction" name="construction"><option value="single" selected>Single print · automatic layer swap</option><option value="two-piece">Two pieces · separate base and cap</option></select><p id="construction-note" class="field-note">The base and top field print as one assembled model with one automatic AMS swap.</p></div>
           <div class="field-grid">
-            <div><label for="base">Base thickness</label><div class="unit-input"><input id="base" name="base" type="number" min="0.6" max="8" step="0.2" value="1"><span>mm</span></div></div>
-            <div><label id="relief-label" for="relief">Light cover thickness</label><div class="unit-input"><input id="relief" name="relief" type="number" min="1" max="2" step="0.02" value="1"><span>mm</span></div></div>
+            <div><label id="base-label" for="base">Base thickness</label><div class="unit-input"><input id="base" name="base" type="number" min="0.6" max="8" step="0.2" value="1"><span>mm</span></div></div>
+            <div id="relief-row"><label id="relief-label" for="relief">Light cover thickness</label><div class="unit-input"><input id="relief" name="relief" type="number" min="1" max="2" step="0.02" value="1"><span>mm</span></div></div>
           </div>
           <div class="divider"></div>
           <div class="section-heading"><span class="step">03</span><h2>The print</h2><span class="tag ams">AMS</span></div>
@@ -87,7 +88,7 @@
           <div class="metrics"><div><span>QR module</span><strong id="module-metric">—</strong></div><div><span>Total height</span><strong id="height-metric">—</strong></div><div><span>Scan check</span><strong id="scan-metric" class="verified">—</strong></div></div>
         </div>
         <div class="swap-card card">
-          <div class="swap-heading"><div><span class="eyebrow">BUILT INTO YOUR 3MF</span><h2 id="swap-title">Change before layer 6</h2></div><span class="swap-count"><b>1</b> AMS SWAP</span></div>
+          <div class="swap-heading"><div><span id="swap-eyebrow" class="eyebrow">BUILT INTO YOUR 3MF</span><h2 id="swap-title">Change before layer 6</h2></div><span id="swap-count" class="swap-count"><b>1</b> AMS SWAP</span></div>
           <div class="layer-track"><div id="base-track" class="base-track"><span id="base-track-label">Layers 1–5 · Base</span></div><div id="qr-track" class="qr-track"><span id="qr-track-label">6–10 · QR</span></div></div>
           <p id="swap-description">Print the light base, switch filament, then print the dark QR.</p>
         </div>
@@ -97,12 +98,12 @@
             <button type="button" id="download-3mf" class="primary primary-main" disabled><span>Download Bambu 3MF</span></button>
             <button type="button" id="download-menu-toggle" class="primary primary-toggle" aria-label="Choose download format" aria-haspopup="menu" aria-expanded="false" disabled><span aria-hidden="true">▾</span></button>
             <div id="download-menu" class="download-menu" role="menu" hidden>
-              <button type="button" id="download-3mf-menu" role="menuitem" disabled><span><strong>Bambu 3MF</strong><small>Project with AMS layer change</small></span><b aria-hidden="true">3MF</b></button>
-              <button type="button" id="download-stl" role="menuitem" disabled><span><strong>STL geometry</strong><small>Printable model without project settings</small></span><b aria-hidden="true">STL</b></button>
+              <button type="button" id="download-3mf-menu" role="menuitem" disabled><span><strong>Bambu 3MF</strong><small id="download-3mf-detail">Project with AMS layer change</small></span><b aria-hidden="true">3MF</b></button>
+              <button type="button" id="download-stl" role="menuitem" disabled><span><strong>STL geometry</strong><small id="download-stl-detail">Printable model without project settings</small></span><b aria-hidden="true">STL</b></button>
             </div>
           </div>
           <div class="secondary-actions"><button type="button" id="download-png" disabled>QR preview PNG</button></div>
-          <p class="export-note">Open the 3MF as a <strong>project</strong>, slice, and check the preview.<br>Use the arrow for STL geometry without the filament change.</p>
+          <p id="export-note" class="export-note">Open the 3MF as a <strong>project</strong>, slice, and check the preview.<br>Use the arrow for STL geometry without the filament change.</p>
         </div>
       </section>
     </div>

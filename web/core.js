@@ -471,18 +471,27 @@ export function createToken(data, profile) {
   const layerHeight = number(data, 'layer_height', 0.2, 0.08, maximumLayer);
   const firstLayer = number(data, 'first_layer', 0.2, 0.08, maximumLayer);
   const treatment = data.treatment || 'raised';
-  if (!['raised', 'inset'].includes(treatment)) throw new InputError('QR treatment must be raised or inset.');
+  if (!['raised', 'inset', 'flat'].includes(treatment)) throw new InputError('QR treatment must be raised, inset, or flat.');
+  const construction = data.construction || 'single';
+  if (!['single', 'two-piece'].includes(construction)) throw new InputError('Print construction is not supported.');
+  if (construction === 'two-piece' && treatment !== 'inset') {
+    throw new InputError('Two-piece construction is available only for inset tokens.');
+  }
   const requestedBase = number(data, 'base', 1, 0.6, 8);
   const requestedRelief = number(data, 'relief', 1, 0.24, 2);
   const baseLayers = Math.max(1, Math.ceil((requestedBase - firstLayer) / layerHeight - 1e-8) + 1);
   const minimumTopLayers = treatment === 'inset' ? 5 : 2;
-  const qrLayers = Math.max(minimumTopLayers, Math.ceil(requestedRelief / layerHeight - 1e-8));
+  const qrLayers = treatment === 'flat' ? baseLayers
+    : Math.max(minimumTopLayers, Math.ceil(requestedRelief / layerHeight - 1e-8));
   const base = round(firstLayer + (baseLayers - 1) * layerHeight);
-  const relief = round(qrLayers * layerHeight);
+  const relief = treatment === 'flat' ? 0 : round(qrLayers * layerHeight);
   const warnings = [];
-  if (Math.abs(base - requestedBase) > 1e-6 || Math.abs(relief - requestedRelief) > 1e-6) {
+  if (Math.abs(base - requestedBase) > 1e-6
+      || (treatment !== 'flat' && Math.abs(relief - requestedRelief) > 1e-6)) {
     const feature = treatment === 'inset' ? 'light top field' : 'QR';
-    warnings.push(`Heights rounded up to complete layers: ${formatNumber(base)} mm base + ${formatNumber(relief)} mm ${feature}.`);
+    warnings.push(treatment === 'flat'
+      ? `Thickness rounded up to complete layers: ${formatNumber(base)} mm.`
+      : `Heights rounded up to complete layers: ${formatNumber(base)} mm base + ${formatNumber(relief)} mm ${feature}.`);
   }
   let correction = data.correction || 'M';
   if (!['M', 'Q', 'H'].includes(correction)) throw new InputError('Error correction must be M, Q, or H.');
@@ -601,22 +610,22 @@ export function createToken(data, profile) {
     edge_size: edgeSize,
     top_profile: topProfile,
     top_size: topSize,
-    edge_slices: treatment === 'raised'
+    edge_slices: treatment === 'raised' || treatment === 'flat'
       ? combinedBaseSlices(edgeProfile, edgeSize, topProfile, topSize, base)
       : edgeSlices(edgeProfile, edgeSize, base),
-    top_slices: topEdgeSlices(topProfile, topSize, relief),
+    top_slices: treatment === 'flat' ? [] : topEdgeSlices(topProfile, topSize, relief),
     diameter,
     minimum_diameter: minimumDiameter,
     minimum_height: minimumHeight,
     base,
     relief,
-    height: round(base + relief),
+    height: treatment === 'flat' ? base : round(base + relief),
     layer_height: layerHeight,
     first_layer: firstLayer,
     base_layers: baseLayers,
     qr_layers: qrLayers,
-    change_layer: baseLayers + 1,
-    change_z: round(base + layerHeight),
+    change_layer: treatment === 'flat' || construction === 'two-piece' ? null : baseLayers + 1,
+    change_z: treatment === 'flat' || construction === 'two-piece' ? null : round(base + layerHeight),
     modules,
     module_size: moduleSize,
     quiet_modules: 4,
@@ -640,6 +649,7 @@ export function createToken(data, profile) {
     warnings,
     correction,
     treatment,
+    construction,
     scan_verified: false,
   };
   result.feature_outlines = featureOutlines(result);
@@ -726,14 +736,14 @@ export function profileInfo(template, name = 'Bambu project') {
   };
 }
 
-export function buildMesh(module, token) {
+function makeSlicedSolid(module, token, slices, zOffset = 0) {
   const { Manifold, CrossSection } = module;
   const tokenSection = new CrossSection([token.outline]);
-  const baseParts = [];
-  const ownedSections = [];
-  for (let index = 0; index < token.edge_slices.length - 1; index++) {
-    const [bottomZ, bottomInset] = token.edge_slices[index];
-    const [topZ, topInset] = token.edge_slices[index + 1];
+  const parts = [];
+  const sections = [];
+  for (let index = 0; index < slices.length - 1; index++) {
+    const [bottomZ, bottomInset] = slices[index];
+    const [topZ, topInset] = slices[index + 1];
     if (topZ <= bottomZ) continue;
     const bottomScale = [
       (token.shape_width - 2 * bottomInset) / token.shape_width,
@@ -744,125 +754,184 @@ export function buildMesh(module, token) {
       (token.shape_height - 2 * topInset) / token.shape_height,
     ];
     const section = tokenSection.scale(bottomScale);
-    ownedSections.push(section);
-    baseParts.push(section.extrude(topZ - bottomZ, 0, 0, [topScale[0] / bottomScale[0], topScale[1] / bottomScale[1]])
-      .translate([0, 0, bottomZ]));
+    sections.push(section);
+    parts.push(section.extrude(topZ - bottomZ, 0, 0, [topScale[0] / bottomScale[0], topScale[1] / bottomScale[1]])
+      .translate([0, 0, zOffset + bottomZ]));
   }
-  const base = baseParts.length === 1 ? baseParts[0] : Manifold.union(baseParts);
-  const outlines = featureOutlines(token);
-  const overlap = Math.min(0.02, token.first_layer / 4);
-  const crossSection = new CrossSection(outlines, 'NonZero');
-  const featureSolid = crossSection.extrude(token.relief + overlap).translate([0, 0, token.base - overlap]);
-  const topParts = [];
-  const topSections = [];
-  let outerRelief;
-  let relief = featureSolid;
-  if (token.treatment === 'inset') {
-    for (let index = 0; index < token.top_slices.length - 1; index++) {
-      const [bottomZ, bottomInset] = token.top_slices[index];
-      const [topZ, topInset] = token.top_slices[index + 1];
-      if (topZ <= bottomZ) continue;
-      const bottomScale = [
-        (token.shape_width - 2 * bottomInset) / token.shape_width,
-        (token.shape_height - 2 * bottomInset) / token.shape_height,
-      ];
-      const topScale = [
-        (token.shape_width - 2 * topInset) / token.shape_width,
-        (token.shape_height - 2 * topInset) / token.shape_height,
-      ];
-      const section = tokenSection.scale(bottomScale);
-      topSections.push(section);
-      topParts.push(section.extrude(topZ - bottomZ, 0, 0,
-        [topScale[0] / bottomScale[0], topScale[1] / bottomScale[1]])
-        .translate([0, 0, token.base + bottomZ]));
-    }
-    outerRelief = topParts.length === 1 ? topParts[0] : Manifold.union(topParts);
-    relief = outerRelief.subtract(featureSolid);
-  }
-  const solid = base.add(relief);
-  try {
-    if (solid.status() !== 'NoError' || solid.isEmpty() || solid.volume() <= 0) throw new Error('Geometry construction failed.');
-    const raw = solid.getMesh();
-    const vertices = new Float32Array(raw.vertProperties);
-    const triangles = new Uint32Array(raw.triVerts);
-    const bounds = solid.boundingBox();
-    if (triangles.length === 0 || Math.abs(bounds.min[2]) > 1e-5 || Math.abs(bounds.max[2] - token.height) > 1e-4) {
-      throw new Error('Geometry failed its solid bounds check.');
-    }
-    return { vertices, triangles, volume: solid.volume(), bounds };
-  } finally {
-    solid.delete();
-    relief.delete();
-    if (featureSolid !== relief) featureSolid.delete();
-    if (outerRelief && outerRelief !== relief) outerRelief.delete();
-    if (topParts.length > 1) topParts.forEach(part => part.delete());
-    topSections.forEach(section => section.delete());
-    crossSection.delete();
-    base.delete();
-    if (baseParts.length > 1) baseParts.forEach(part => part.delete());
-    ownedSections.forEach(section => section.delete());
-    tokenSection.delete();
-  }
+  const solid = parts.length === 1 ? parts[0] : Manifold.union(parts);
+  return { solid, parts, sections, tokenSection };
 }
 
 function previewMeshData(solid) {
   const raw = solid.getMesh();
-  return { vertices: new Float32Array(raw.vertProperties), triangles: new Uint32Array(raw.triVerts) };
+  return {
+    vertices: new Float32Array(raw.vertProperties),
+    triangles: new Uint32Array(raw.triVerts),
+    volume: solid.volume(),
+    bounds: solid.boundingBox(),
+  };
+}
+
+function deleteSlicedBuild(build, keepSolid = false) {
+  if (!keepSolid) build.solid.delete();
+  if (build.parts.length > 1) build.parts.forEach(part => part.delete());
+  build.sections.forEach(section => section.delete());
+  build.tokenSection.delete();
+}
+
+function translateMeshData(mesh, offset) {
+  const vertices = new Float32Array(mesh.vertices);
+  for (let index = 0; index < vertices.length; index += 3) {
+    vertices[index] += offset[0];
+    vertices[index + 1] += offset[1];
+    vertices[index + 2] += offset[2];
+  }
+  return { ...mesh, vertices };
+}
+
+function combineMeshData(meshes) {
+  const vertexLength = meshes.reduce((sum, mesh) => sum + mesh.vertices.length, 0);
+  const triangleLength = meshes.reduce((sum, mesh) => sum + mesh.triangles.length, 0);
+  const vertices = new Float32Array(vertexLength);
+  const triangles = new Uint32Array(triangleLength);
+  let vertexOffset = 0;
+  let triangleOffset = 0;
+  let vertexCount = 0;
+  for (const mesh of meshes) {
+    vertices.set(mesh.vertices, vertexOffset);
+    for (let index = 0; index < mesh.triangles.length; index++) {
+      triangles[triangleOffset + index] = mesh.triangles[index] + vertexCount;
+    }
+    vertexOffset += mesh.vertices.length;
+    triangleOffset += mesh.triangles.length;
+    vertexCount += mesh.vertices.length / 3;
+  }
+  const minimum = [Infinity, Infinity, Infinity];
+  const maximum = [-Infinity, -Infinity, -Infinity];
+  for (let index = 0; index < vertices.length; index += 3) {
+    for (let axis = 0; axis < 3; axis++) {
+      minimum[axis] = Math.min(minimum[axis], vertices[index + axis]);
+      maximum[axis] = Math.max(maximum[axis], vertices[index + axis]);
+    }
+  }
+  return {
+    vertices,
+    triangles,
+    volume: meshes.reduce((sum, mesh) => sum + mesh.volume, 0),
+    bounds: { min: minimum, max: maximum },
+  };
+}
+
+export function buildMaterialMeshes(module, token) {
+  if (token.treatment !== 'flat' && token.construction !== 'two-piece') {
+    throw new Error('This token does not use independently modeled material parts.');
+  }
+  const { CrossSection } = module;
+  const baseBuild = makeSlicedSolid(module, token, token.edge_slices);
+  const featureSection = new CrossSection(featureOutlines(token), 'NonZero');
+  const overlap = Math.min(0.02, token.first_layer / 4);
+  let cutter;
+  let firstSolid;
+  let secondSolid;
+  let topBuild;
+  try {
+    if (token.treatment === 'flat') {
+      cutter = featureSection.extrude(token.base + 2 * overlap).translate([0, 0, -overlap]);
+      firstSolid = baseBuild.solid.subtract(cutter);
+      secondSolid = baseBuild.solid.intersect(cutter);
+      return [
+        { name: 'Background', filament: token.base_filament, mesh: previewMeshData(firstSolid) },
+        { name: 'QR', filament: token.qr_filament, mesh: previewMeshData(secondSolid) },
+      ];
+    }
+    topBuild = makeSlicedSolid(module, token, token.top_slices);
+    cutter = featureSection.extrude(token.relief + 2 * overlap).translate([0, 0, -overlap]);
+    secondSolid = topBuild.solid.subtract(cutter);
+    return [
+      { name: 'Dark base', filament: token.base_filament, mesh: previewMeshData(baseBuild.solid) },
+      { name: 'Light QR cap', filament: token.qr_filament, mesh: previewMeshData(secondSolid) },
+    ];
+  } finally {
+    firstSolid?.delete();
+    secondSolid?.delete();
+    cutter?.delete();
+    if (topBuild) deleteSlicedBuild(topBuild);
+    featureSection.delete();
+    deleteSlicedBuild(baseBuild);
+  }
+}
+
+export function buildMesh(module, token) {
+  if (token.treatment === 'flat') {
+    const baseBuild = makeSlicedSolid(module, token, token.edge_slices);
+    try { return previewMeshData(baseBuild.solid); } finally { deleteSlicedBuild(baseBuild); }
+  }
+  if (token.construction === 'two-piece') {
+    const parts = buildMaterialMeshes(module, token);
+    const spacing = token.shape_width / 2 + 3;
+    return combineMeshData([
+      translateMeshData(parts[0].mesh, [-spacing, 0, 0]),
+      translateMeshData(parts[1].mesh, [spacing, 0, 0]),
+    ]);
+  }
+  const { CrossSection } = module;
+  const baseBuild = makeSlicedSolid(module, token, token.edge_slices);
+  const featureSection = new CrossSection(featureOutlines(token), 'NonZero');
+  const overlap = Math.min(0.02, token.first_layer / 4);
+  const featureSolid = featureSection.extrude(token.relief + overlap).translate([0, 0, token.base - overlap]);
+  let topBuild;
+  let relief = featureSolid;
+  let solid;
+  try {
+    if (token.treatment === 'inset') {
+      topBuild = makeSlicedSolid(module, token, token.top_slices, token.base);
+      relief = topBuild.solid.subtract(featureSolid);
+    }
+    solid = baseBuild.solid.add(relief);
+    const mesh = previewMeshData(solid);
+    if (mesh.triangles.length === 0 || Math.abs(mesh.bounds.min[2]) > 1e-5
+        || Math.abs(mesh.bounds.max[2] - token.height) > 1e-4) {
+      throw new Error('Geometry failed its solid bounds check.');
+    }
+    return mesh;
+  } finally {
+    solid?.delete();
+    if (relief !== featureSolid) relief.delete();
+    featureSolid.delete();
+    if (topBuild) deleteSlicedBuild(topBuild);
+    featureSection.delete();
+    deleteSlicedBuild(baseBuild);
+  }
 }
 
 export function buildPreviewParts(module, token) {
-  const { Manifold, CrossSection } = module;
-  const tokenSection = new CrossSection([token.outline]);
-  const makeSlicedSolid = (slices, zOffset = 0) => {
-    const parts = [];
-    const sections = [];
-    for (let index = 0; index < slices.length - 1; index++) {
-      const [bottomZ, bottomInset] = slices[index];
-      const [topZ, topInset] = slices[index + 1];
-      if (topZ <= bottomZ) continue;
-      const bottomScale = [
-        (token.shape_width - 2 * bottomInset) / token.shape_width,
-        (token.shape_height - 2 * bottomInset) / token.shape_height,
-      ];
-      const topScale = [
-        (token.shape_width - 2 * topInset) / token.shape_width,
-        (token.shape_height - 2 * topInset) / token.shape_height,
-      ];
-      const section = tokenSection.scale(bottomScale);
-      sections.push(section);
-      parts.push(section.extrude(topZ - bottomZ, 0, 0,
-        [topScale[0] / bottomScale[0], topScale[1] / bottomScale[1]])
-        .translate([0, 0, zOffset + bottomZ]));
-    }
-    const solid = parts.length === 1 ? parts[0] : Manifold.union(parts);
-    return { solid, parts, sections };
-  };
-  const baseBuild = makeSlicedSolid(token.edge_slices);
+  if (token.treatment === 'flat') {
+    const parts = buildMaterialMeshes(module, token);
+    return { base: parts[0].mesh, top: parts[1].mesh };
+  }
+  if (token.construction === 'two-piece') {
+    const parts = buildMaterialMeshes(module, token);
+    return { base: parts[0].mesh, top: parts[1].mesh };
+  }
+  const { CrossSection } = module;
+  const baseBuild = makeSlicedSolid(module, token, token.edge_slices);
   const featureSection = new CrossSection(featureOutlines(token), 'NonZero');
   const overlap = Math.min(0.02, token.first_layer / 4);
-  const featureSolid = featureSection.extrude(token.relief + overlap)
-    .translate([0, 0, token.base - overlap]);
+  const featureSolid = featureSection.extrude(token.relief + overlap).translate([0, 0, token.base - overlap]);
   let topBuild;
   let topSolid = featureSolid;
-  if (token.treatment === 'inset') {
-    topBuild = makeSlicedSolid(token.top_slices, token.base);
-    topSolid = topBuild.solid.subtract(featureSolid);
-  }
   try {
+    if (token.treatment === 'inset') {
+      topBuild = makeSlicedSolid(module, token, token.top_slices, token.base);
+      topSolid = topBuild.solid.subtract(featureSolid);
+    }
     return { base: previewMeshData(baseBuild.solid), top: previewMeshData(topSolid) };
   } finally {
-    baseBuild.solid.delete();
-    if (baseBuild.parts.length > 1) baseBuild.parts.forEach(part => part.delete());
-    baseBuild.sections.forEach(section => section.delete());
     topSolid.delete();
     if (featureSolid !== topSolid) featureSolid.delete();
-    if (topBuild) {
-      if (topBuild.solid !== topSolid) topBuild.solid.delete();
-      if (topBuild.parts.length > 1) topBuild.parts.forEach(part => part.delete());
-      topBuild.sections.forEach(section => section.delete());
-    }
+    if (topBuild) deleteSlicedBuild(topBuild);
     featureSection.delete();
-    tokenSection.delete();
+    deleteSlicedBuild(baseBuild);
   }
 }
 
@@ -929,8 +998,10 @@ function preparedSettings(template, token) {
     ? settings.flush_volumes_matrix.map(String)
     : Array.from({ length: expected }, (_, index) => index % (count + 1) === 0 ? '0' : '600');
   for (let block = 0; block < blocks; block++) {
-    const index = block * count * count + (token.base_filament - 1) * count + token.qr_filament - 1;
-    matrix[index] = String(Math.max(280, Number(matrix[index]) || 0));
+    for (const [from, to] of [[token.base_filament, token.qr_filament], [token.qr_filament, token.base_filament]]) {
+      const index = block * count * count + (from - 1) * count + to - 1;
+      matrix[index] = String(Math.max(280, Number(matrix[index]) || 0));
+    }
   }
   settings.flush_volumes_matrix = matrix;
   settings.wipe_tower_x = ['18'];
@@ -946,7 +1017,7 @@ function metadata(key, value) {
   return `<metadata key="${xmlEscape(key)}" value="${xmlEscape(value)}"/>`;
 }
 
-function meshXml(mesh) {
+function meshXml(mesh, objectId = 1) {
   let vertices = '';
   for (let index = 0; index < mesh.vertices.length; index += 3) {
     vertices += `<vertex x="${formatNumber(mesh.vertices[index], 9)}" y="${formatNumber(mesh.vertices[index + 1], 9)}" z="${formatNumber(mesh.vertices[index + 2], 9)}"/>`;
@@ -955,7 +1026,7 @@ function meshXml(mesh) {
   for (let index = 0; index < mesh.triangles.length; index += 3) {
     triangles += `<triangle v1="${mesh.triangles[index]}" v2="${mesh.triangles[index + 1]}" v3="${mesh.triangles[index + 2]}"/>`;
   }
-  return `<?xml version="1.0" encoding="utf-8"?><model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" unit="millimeter"><resources><object id="1" type="model"><mesh><vertices>${vertices}</vertices><triangles>${triangles}</triangles></mesh></object></resources><build/></model>`;
+  return `<?xml version="1.0" encoding="utf-8"?><model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" unit="millimeter"><resources><object id="${objectId}" type="model"><mesh><vertices>${vertices}</vertices><triangles>${triangles}</triangles></mesh></object></resources><build/></model>`;
 }
 
 function formatNumber(value, significant = 12) {
@@ -975,41 +1046,71 @@ export async function tokenFilename(token) {
   if (token.module_style !== 'square') details.push(token.module_style);
   if (token.finder_style !== 'square') details.push(`eyes-${token.finder_style}`);
   if (token.center_icon !== 'none') details.push(`center-${token.center_icon}`);
+  if (token.construction === 'two-piece') details.push('two-piece');
   details.push(token.treatment);
   return `qr-${details.join('-')}-${host}-${suffix}`;
 }
 
-export function encodeBambu3mf(template, profile, token, mesh, filename, pngBytes) {
+export function encodeBambu3mf(template, profile, token, mesh, filename, pngBytes, materialParts = []) {
   if (token.shape_width > (profile.max_width || profile.max_diameter)
       || token.shape_height > (profile.max_height || profile.max_diameter)) {
     throw new InputError('Token is too large for this bed with prime-tower clearance.');
   }
   const [centerX, centerY] = bedGeometry(template).center;
-  const triangleCount = mesh.triangles.length / 3;
+  let projectParts = [{ name: 'Token', filament: token.base_filament, mesh }];
+  if (token.treatment === 'flat') projectParts = materialParts;
+  if (token.construction === 'two-piece') {
+    if (materialParts.length !== 2) throw new InputError('Two-piece export is missing its printable parts.');
+    const gap = 6;
+    if (token.shape_width * 2 + gap <= (profile.max_width || profile.max_diameter)) {
+      const spacing = token.shape_width / 2 + gap / 2;
+      projectParts = [
+        { ...materialParts[0], mesh: translateMeshData(materialParts[0].mesh, [-spacing, 0, 0]) },
+        { ...materialParts[1], mesh: translateMeshData(materialParts[1].mesh, [spacing, 0, 0]) },
+      ];
+    } else if (token.shape_height * 2 + gap <= (profile.max_height || profile.max_diameter)) {
+      const spacing = token.shape_height / 2 + gap / 2;
+      projectParts = [
+        { ...materialParts[0], mesh: translateMeshData(materialParts[0].mesh, [0, -spacing, 0]) },
+        { ...materialParts[1], mesh: translateMeshData(materialParts[1].mesh, [0, spacing, 0]) },
+      ];
+    } else {
+      throw new InputError('Both inset pieces do not fit on this plate with prime-tower clearance. Reduce the token size.');
+    }
+  }
+  if (!projectParts.length) throw new InputError('The material parts were not generated.');
+  const triangleCount = projectParts.reduce((sum, part) => sum + part.mesh.triangles.length / 3, 0);
   const settings = preparedSettings(template, token);
   const date = new Date().toISOString().slice(0, 10);
-  const partName = `${label(token.shape)} with ${token.module_style} QR modules, ${token.finder_style} finder eyes, ${token.edge_profile} lower edge, ${token.top_profile} top edge, and ${token.treatment === 'inset' ? 'inset QR field' : 'raised QR'}`;
-  const rootModel = `<?xml version="1.0" encoding="utf-8"?><model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" unit="millimeter" requiredextensions="p"><metadata name="Application">${xmlEscape(template.application)}</metadata><metadata name="BambuStudio:3mfVersion">1</metadata><metadata name="Title">${xmlEscape(filename)}</metadata><metadata name="CreationDate">${date}</metadata><metadata name="Description">QR Token Studio ${token.shape} with ${token.module_style} QR modules, ${token.finder_style} finder eyes, ${token.corner_style} corners, ${token.edge_profile} lower edge, and ${token.top_profile} top edge. ${label(token.treatment)} QR treatment; change before layer ${token.change_layer}, top Z ${formatNumber(token.change_z)} mm.</metadata><resources><object id="2" type="model"><components><component objectid="1" p:path="/3D/Objects/object_1.model" transform="1 0 0 0 1 0 0 0 1 0 0 0"/></components></object></resources><build><item objectid="2" printable="1" transform="1 0 0 0 1 0 0 0 1 ${formatNumber(centerX)} ${formatNumber(centerY)} 0"/></build></model>`;
-  const modelSettings = `<?xml version="1.0" encoding="utf-8"?><config><object id="2">${metadata('name', filename)}${metadata('extruder', token.base_filament)}<metadata face_count="${triangleCount}"/><part id="1" subtype="normal_part">${metadata('name', partName)}${metadata('matrix', '1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1')}<mesh_stat face_count="${triangleCount}" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/></part></object><plate>${metadata('plater_id', 1)}${metadata('plater_name', 'QR Token')}${metadata('locked', 'false')}${metadata('filament_map_mode', 'Manual')}${metadata('gcode_file', '')}${metadata('thumbnail_file', 'Metadata/plate_1.png')}<model_instance>${metadata('object_id', 2)}${metadata('instance_id', 0)}${metadata('identify_id', 1)}</model_instance></plate><assemble/></config>`;
-  const events = `<?xml version="1.0" encoding="utf-8"?><custom_gcodes_per_layer><plate><plate_info id="1"/><layer top_z="${formatNumber(token.change_z)}" type="2" extruder="${token.qr_filament}" color="${token.qr_color}" extra="" gcode="tool_change"/><mode value="MultiAsSingle"/></plate></custom_gcodes_per_layer>`;
-  const relationships = target => `<?xml version="1.0" encoding="utf-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="${target}" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>`;
+  const rootId = projectParts.length + 1;
+  const components = projectParts.map((part, index) => `<component objectid="${index + 1}" p:path="/3D/Objects/object_${index + 1}.model" transform="1 0 0 0 1 0 0 0 1 0 0 0"/>`).join('');
+  const changeDescription = token.change_z == null ? 'Material assignments are stored on independent model parts.'
+    : `Change before layer ${token.change_layer}, top Z ${formatNumber(token.change_z)} mm.`;
+  const rootModel = `<?xml version="1.0" encoding="utf-8"?><model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" unit="millimeter" requiredextensions="p"><metadata name="Application">${xmlEscape(template.application)}</metadata><metadata name="BambuStudio:3mfVersion">1</metadata><metadata name="Title">${xmlEscape(filename)}</metadata><metadata name="CreationDate">${date}</metadata><metadata name="Description">QR Token Studio ${token.shape} with ${token.module_style} QR modules, ${token.finder_style} finder eyes, ${token.corner_style} corners, ${token.edge_profile} lower edge, and ${token.top_profile} top edge. ${label(token.treatment)} QR treatment. ${changeDescription}</metadata><resources><object id="${rootId}" type="model"><components>${components}</components></object></resources><build><item objectid="${rootId}" printable="1" transform="1 0 0 0 1 0 0 0 1 ${formatNumber(centerX)} ${formatNumber(centerY)} 0"/></build></model>`;
+  const partSettings = projectParts.map((part, index) => `<part id="${index + 1}" subtype="normal_part">${metadata('name', part.name)}${metadata('extruder', part.filament)}${metadata('matrix', '1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1')}<mesh_stat face_count="${part.mesh.triangles.length / 3}" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/></part>`).join('');
+  const objectExtruder = projectParts.length === 1 ? metadata('extruder', projectParts[0].filament) : '';
+  const modelSettings = `<?xml version="1.0" encoding="utf-8"?><config><object id="${rootId}">${metadata('name', filename)}${objectExtruder}<metadata face_count="${triangleCount}"/>${partSettings}</object><plate>${metadata('plater_id', 1)}${metadata('plater_name', 'QR Token')}${metadata('locked', 'false')}${metadata('filament_map_mode', 'Manual')}${metadata('gcode_file', '')}${metadata('thumbnail_file', 'Metadata/plate_1.png')}<model_instance>${metadata('object_id', rootId)}${metadata('instance_id', 0)}${metadata('identify_id', 1)}</model_instance></plate><assemble/></config>`;
+  const changeLayer = token.change_z == null ? '' : `<layer top_z="${formatNumber(token.change_z)}" type="2" extruder="${token.qr_filament}" color="${token.qr_color}" extra="" gcode="tool_change"/>`;
+  const events = `<?xml version="1.0" encoding="utf-8"?><custom_gcodes_per_layer><plate><plate_info id="1"/>${changeLayer}<mode value="MultiAsSingle"/></plate></custom_gcodes_per_layer>`;
+  const relationships = targets => `<?xml version="1.0" encoding="utf-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${targets.map((target, index) => `<Relationship Target="${target}" Id="rel-${index + 1}" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>`).join('')}</Relationships>`;
   const contentTypes = '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="config" ContentType="application/octet-stream"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="json" ContentType="application/json"/></Types>';
-  const report = { ...token, profile, mesh: { watertight: true, triangles: triangleCount, volume_mm3: round(mesh.volume, 3) } };
+  const reportMesh = combineMeshData(projectParts.map(part => part.mesh));
+  const report = { ...token, profile, mesh: { watertight: true, triangles: triangleCount, volume_mm3: round(reportMesh.volume, 3) }, parts: projectParts.map(part => ({ name: part.name, filament: part.filament, triangles: part.mesh.triangles.length / 3 })) };
   delete report.matrix;
   delete report.outline;
   delete report.feature_outlines;
   const entries = {
     '[Content_Types].xml': strToU8(contentTypes),
-    '_rels/.rels': strToU8(relationships('/3D/3dmodel.model')),
-    '3D/_rels/3dmodel.model.rels': strToU8(relationships('/3D/Objects/object_1.model')),
+    '_rels/.rels': strToU8(relationships(['/3D/3dmodel.model'])),
+    '3D/_rels/3dmodel.model.rels': strToU8(relationships(projectParts.map((part, index) => `/3D/Objects/object_${index + 1}.model`))),
     '3D/3dmodel.model': strToU8(rootModel),
-    '3D/Objects/object_1.model': strToU8(meshXml(mesh)),
     'Metadata/project_settings.config': strToU8(JSON.stringify(settings, null, 2)),
     'Metadata/model_settings.config': strToU8(modelSettings),
     'Metadata/custom_gcode_per_layer.xml': strToU8(events),
     'Metadata/plate_1.png': pngBytes,
     'Metadata/qr_token.json': strToU8(JSON.stringify(report, null, 2)),
   };
+  projectParts.forEach((part, index) => { entries[`3D/Objects/object_${index + 1}.model`] = strToU8(meshXml(part.mesh, index + 1)); });
   return zipSync(entries, { level: 6 });
 }
 

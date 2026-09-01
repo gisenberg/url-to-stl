@@ -17,6 +17,8 @@ def test_pages_build_is_the_generator_without_server_routes():
         assert "QR modules" in html
         assert "Finder eyes" in html
         assert "Center badge" in html
+        assert "Flat · dark code flush with a light face" in html
+        assert "Two pieces · separate base and cap" in html
         assert "Download Bambu 3MF" in html
         assert "Download for Windows" not in html
         assert "/api/" not in app

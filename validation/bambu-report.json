@@ -9,6 +9,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -19,6 +20,29 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "flat",
+      "bambu_result": "Success",
+      "filament_changes": 5,
+      "warning_message": "",
+      "change_layer": null,
+      "change_z": null,
+      "toolchange_count": 5,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "inset-two-piece",
+      "bambu_result": "Success",
+      "filament_changes": 5,
+      "warning_message": "",
+      "change_layer": null,
+      "change_z": null,
+      "toolchange_count": 5,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -29,6 +53,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -39,6 +64,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -49,6 +75,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -59,6 +86,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -69,6 +97,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -79,6 +108,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -89,6 +119,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -99,6 +130,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -109,6 +141,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -119,6 +152,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -129,6 +163,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -139,6 +174,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -149,6 +185,7 @@
       "warning_message": "",
       "change_layer": 7,
       "change_z": 1.16,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     },
@@ -159,6 +196,7 @@
       "warning_message": "",
       "change_layer": 6,
       "change_z": 1.2,
+      "toolchange_count": 1,
       "toolpaths_decode": "https://example.com",
       "correct_filament_on_every_model_layer": true
     }

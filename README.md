@@ -1,6 +1,6 @@
 # QR Token Studio
 
-QR Token Studio is a free browser-based generator for raised or inset QR tokens with an automatic Bambu Studio AMS filament change.
+QR Token Studio is a free browser-based generator for raised, inset, flat, or two-piece QR tokens with Bambu Studio AMS assignments.
 Choose a circle, square, independently sized rectangle, pentagon, or hexagon.
 The business-card preset creates an 85.6 × 54 mm card with a right-aligned QR and an optional Instagram, X, Facebook, LinkedIn, YouTube, or TikTok icon.
 QR styling includes classic blocks, rounded tiles, dots, faceted tiles, square, rounded, or circular finder eyes, and protected center badges.
@@ -12,15 +12,15 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 ## Use the web app
 
 1. Enter the destination URL.
-2. Choose the preset or token shape, dimensions, corner treatment, lower and top edge treatments, raised or inset QR treatment, base thickness, and feature depth.
+2. Choose the preset or token shape, dimensions, corner treatment, lower and top edge treatments, raised, inset, or flat QR treatment, base thickness, and feature depth.
    Rectangles have independent width and height controls.
    Choose a QR module style, finder-eye style, and optional center badge.
    Center badges reserve a bounded light area and lock classic modules, square finder eyes, and High error correction because that combination survives native slicing.
    The size slider starts at the shape-specific minimum printable width for the current URL and nozzle.
 3. Download **Bambu 3MF**.
    Use the arrow segment on the download button when you need geometry-only STL instead.
-4. Open it **as a project** in Bambu Studio so its settings and layer event are retained.
-5. Slice and confirm the preview shows one filament change and a dark QR against a light surface.
+4. Open it **as a project** in Bambu Studio so its settings, material parts, and any layer event are retained.
+5. Slice and confirm the preview shows a dark QR against a light surface with the expected filament assignments.
 6. Map the two project filaments to the desired physical AMS slots in the print dialog.
 7. Print one token and scan it with your phone before printing a batch.
 
@@ -31,6 +31,8 @@ The generator uses fixed dark and light preview colors; assign the actual AMS sp
 The web app defaults to an inset treatment that prints a dark base first, then adds a light top field around openings that reveal the recessed dark QR.
 The light top field is at least five complete layers thick to cover the dark base reliably.
 Choose the raised treatment to print the original dark QR above a light base.
+Choose two-piece construction with the inset treatment to place the dark base and perforated light cap as separate parts on the plate for alignment and bonding after printing.
+Choose the flat treatment to create complementary light-background and dark-QR parts with one level top surface and no raised or recessed feature.
 
 Under **Layer settings & custom profile**, you can import another Bambu Studio project with two or more filaments of the same material.
 The browser reads its printer, nozzle, material, bed, and native machine settings from memory without uploading the file.
@@ -50,8 +52,11 @@ In raised mode, the dark QR geometry starts at **1.0 mm** and is 1 mm tall by de
 In inset mode, the dark base ends at **1.0 mm** and the light top field starts after the swap, leaving the dark QR recessed to the base surface.
 The default 1 mm top field provides five light layers at 0.2 mm per layer.
 That distinction prevents changing the final base layer to the QR color.
+Flat mode assigns complementary background and QR volumes to separate filaments across the full token thickness.
+Two-piece inset mode assigns the base and cap to separate filaments and lays them out with a 6 mm gap.
 
-The project stores the event in `Metadata/custom_gcode_per_layer.xml` as a tool change in `MultiAsSingle` mode.
+Raised and single-print inset projects store one event in `Metadata/custom_gcode_per_layer.xml` as a tool change in `MultiAsSingle` mode.
+Flat and two-piece inset projects store filament assignments on two model parts without adding a fake layer event.
 There is no manual pause and no hand-written printer command inserted by the generator.
 Bambu Studio uses the native profile to produce the AMS commands when the project is sliced.
 Changing layer height or scaling Z later in the slicer can move the intended boundary, so regenerate the project after changing those values.
@@ -75,7 +80,7 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 - Finder-eye treatments include classic square, rounded, and circular styles.
 - A clear center or social icon badge removes only a bounded central module region, preserves the quiet zone and finder eyes, locks classic modules and square finder eyes, and forces High error correction.
 - Every browser preview is independently decoded with jsQR before export is enabled.
-- Manifold WebAssembly performs the 2D and 3D boolean operations that produce one watertight connected solid.
+- Manifold WebAssembly performs the 2D and 3D boolean operations that produce watertight single or complementary material parts.
 - A 0.01 mm corner relief prevents diagonal QR cells from creating non-manifold edges when an STL reader welds vertices.
 - Print settings preserve two walls on top surfaces to avoid hollow centers in isolated QR modules.
 - The prime tower is kept separate from the centered token, and the export reserves bed clearance for it.
@@ -127,8 +132,8 @@ npm run build:web
 .venv\Scripts\python.exe tests\validate_bambu.py --workdir ..\..\work\bambu-validation --report validation\bambu-report.json
 ```
 
-The native integration test checks every supported inset shape and lower-edge treatment, a rounded top edge, an Instagram business card, and representative styled center-badge combinations for successful slicing, exactly one filament change, correct filament selection on every model layer, and decoding of the actual sliced QR toolpaths.
-Browser-generated raised and inset 3MF projects have also been passed through the installed Bambu Studio CLI and checked for one connected watertight body, one layer change, correct model-layer colors, and decodable sliced QR toolpaths.
+The native integration test checks every supported inset shape and lower-edge treatment, flat and two-piece modes, a rounded top edge, an Instagram business card, and representative styled center-badge combinations for successful slicing, correct filament selection, and decoding of the actual sliced QR toolpaths.
+Browser-generated raised, inset, flat, and two-piece 3MF projects have also been passed through the installed Bambu Studio CLI and checked for watertight geometry, correct material assignment, and decodable sliced QR toolpaths.
 No validation command starts a print job.
 
 Bambu Studio 02.07.01.62 logs `Invalid T command` for the X2D profile’s own end-of-print commands `T65279` and `T65535`, including on an untouched native cube baseline.

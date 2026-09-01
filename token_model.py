@@ -488,11 +488,14 @@ class Token:
     warnings: list
     correction: str
     treatment: str
+    construction: str
     base_filament: int
     qr_filament: int
 
     @property
     def change_z(self):
+        if self.treatment == "flat" or self.construction == "two-piece":
+            return None
         return round(self.base + self.layer_height, 6)
 
     @property
@@ -513,6 +516,8 @@ class Token:
             details.append(f"eyes-{self.finder_style}")
         if self.center_icon != "none":
             details.append(f"center-{self.center_icon}")
+        if self.construction == "two-piece":
+            details.append("two-piece")
         details.append(self.treatment)
         return f"qr-{'-'.join(details)}-{host}-{sha256(self.url.encode()).hexdigest()[:8]}"
 
@@ -536,12 +541,12 @@ class Token:
             "minimum_height": self.minimum_height,
             "base": self.base,
             "relief": self.relief,
-            "height": round(self.base + self.relief, 6),
+            "height": self.height,
             "layer_height": self.layer_height,
             "first_layer": self.first_layer,
             "base_layers": self.base_layers,
             "qr_layers": self.qr_layers,
-            "change_layer": self.base_layers + 1,
+            "change_layer": None if self.change_z is None else self.base_layers + 1,
             "change_z": self.change_z,
             "modules": len(self.matrix),
             "module_size": self.module,
@@ -568,8 +573,13 @@ class Token:
             "filename": self.filename,
             "correction": self.correction,
             "treatment": self.treatment,
+            "construction": self.construction,
             "scan_verified": True,
         }
+
+    @property
+    def height(self):
+        return self.base if self.treatment == "flat" else round(self.base + self.relief, 6)
 
     def feature_outlines(self):
         outlines = []
@@ -644,11 +654,10 @@ class Token:
         img.save(output, format="PNG")
         return output.getvalue()
 
-    def mesh(self):
-        """Union QR feature outlines into the base, avoiding overlapping STL shells."""
+    def _sliced_solid(self, slices, z_offset=0):
         token_section = manifold.CrossSection([self.outline])
-        base_parts = []
-        for (bottom_z, bottom_inset), (top_z, top_inset) in zip(self.edge_slices, self.edge_slices[1:]):
+        parts = []
+        for (bottom_z, bottom_inset), (top_z, top_inset) in zip(slices, slices[1:]):
             if top_z <= bottom_z:
                 continue
             bottom_scale = (
@@ -660,41 +669,16 @@ class Token:
                 (self.shape_height - 2 * top_inset) / self.shape_height,
             )
             section = token_section.scale(bottom_scale)
-            base_parts.append(
+            parts.append(
                 section.extrude(
                     top_z - bottom_z,
                     scale_top=(top_scale[0] / bottom_scale[0], top_scale[1] / bottom_scale[1]),
-                ).translate((0, 0, bottom_z))
+                ).translate((0, 0, z_offset + bottom_z))
             )
-        base_solid = manifold.Manifold.batch_boolean(base_parts, manifold.OpType.Add)
-        overlap = min(0.02, self.first_layer / 4)
-        # Union in 2D first so shared row boundaries use a common coordinate grid.
-        feature_section = manifold.CrossSection(self.feature_outlines(), manifold.FillRule.NonZero)
-        feature_solid = feature_section.extrude(self.relief + overlap).translate((0, 0, self.base - overlap))
-        relief = feature_solid
-        if self.treatment == "inset":
-            top_parts = []
-            for (bottom_z, bottom_inset), (top_z, top_inset) in zip(self.top_slices, self.top_slices[1:]):
-                if top_z <= bottom_z:
-                    continue
-                bottom_scale = (
-                    (self.shape_width - 2 * bottom_inset) / self.shape_width,
-                    (self.shape_height - 2 * bottom_inset) / self.shape_height,
-                )
-                top_scale = (
-                    (self.shape_width - 2 * top_inset) / self.shape_width,
-                    (self.shape_height - 2 * top_inset) / self.shape_height,
-                )
-                section = token_section.scale(bottom_scale)
-                top_parts.append(
-                    section.extrude(
-                        top_z - bottom_z,
-                        scale_top=(top_scale[0] / bottom_scale[0], top_scale[1] / bottom_scale[1]),
-                    ).translate((0, 0, self.base + bottom_z))
-                )
-            outer_relief = manifold.Manifold.batch_boolean(top_parts, manifold.OpType.Add)
-            relief = outer_relief - feature_solid
-        solid = base_solid + relief
+        return manifold.Manifold.batch_boolean(parts, manifold.OpType.Add)
+
+    @staticmethod
+    def _mesh_from_solid(solid):
         if solid.status() != manifold.Error.NoError:
             raise RuntimeError(f"Geometry construction failed: {solid.status()}")
         raw = solid.to_mesh64()
@@ -704,6 +688,55 @@ class Token:
         if not mesh.is_watertight or not mesh.is_winding_consistent or mesh.volume <= 0:
             raise RuntimeError("Geometry failed the watertight solid check.")
         return mesh
+
+    def part_meshes(self):
+        """Return independently printable material parts for flat or two-piece output."""
+        if self.treatment not in ("flat", "inset"):
+            raise RuntimeError("This token does not use independently modeled material parts.")
+        base_solid = self._sliced_solid(self.edge_slices)
+        overlap = min(0.02, self.first_layer / 4)
+        feature_section = manifold.CrossSection(self.feature_outlines(), manifold.FillRule.NonZero)
+        if self.treatment == "flat":
+            cutter = feature_section.extrude(self.base + 2 * overlap).translate((0, 0, -overlap))
+            feature_solid = base_solid ^ cutter
+            background_solid = base_solid - cutter
+            return [
+                {
+                    "name": "Background",
+                    "filament": self.base_filament,
+                    "mesh": self._mesh_from_solid(background_solid),
+                },
+                {"name": "QR", "filament": self.qr_filament, "mesh": self._mesh_from_solid(feature_solid)},
+            ]
+        if self.construction != "two-piece":
+            raise RuntimeError("Inset material parts are available only in two-piece construction.")
+        cap_outer = self._sliced_solid(self.top_slices)
+        cutter = feature_section.extrude(self.relief + 2 * overlap).translate((0, 0, -overlap))
+        cap_solid = cap_outer - cutter
+        return [
+            {"name": "Dark base", "filament": self.base_filament, "mesh": self._mesh_from_solid(base_solid)},
+            {"name": "Light QR cap", "filament": self.qr_filament, "mesh": self._mesh_from_solid(cap_solid)},
+        ]
+
+    def mesh(self):
+        """Build the single solid or a bed-ready pair of independent pieces."""
+        base_solid = self._sliced_solid(self.edge_slices)
+        if self.treatment == "flat":
+            return self._mesh_from_solid(base_solid)
+        if self.construction == "two-piece":
+            parts = self.part_meshes()
+            spacing = self.shape_width / 2 + 3
+            parts[0]["mesh"].apply_translation((-spacing, 0, 0))
+            parts[1]["mesh"].apply_translation((spacing, 0, 0))
+            return trimesh.util.concatenate([part["mesh"] for part in parts])
+        overlap = min(0.02, self.first_layer / 4)
+        feature_section = manifold.CrossSection(self.feature_outlines(), manifold.FillRule.NonZero)
+        feature_solid = feature_section.extrude(self.relief + overlap).translate((0, 0, self.base - overlap))
+        relief = feature_solid
+        if self.treatment == "inset":
+            outer_relief = self._sliced_solid(self.top_slices, self.base)
+            relief = outer_relief - feature_solid
+        return self._mesh_from_solid(base_solid + relief)
 
 
 def create_token(data, nozzle=0.4, filament_count=2):
@@ -773,19 +806,33 @@ def create_token(data, nozzle=0.4, filament_count=2):
     layer = number(data, "layer_height", 0.2, 0.08, min(0.3, nozzle * 0.75))
     first = number(data, "first_layer", 0.2, 0.08, min(0.3, nozzle * 0.75))
     treatment = data.get("treatment", "raised")
-    if treatment not in ("raised", "inset"):
-        raise InputError("QR treatment must be raised or inset.")
+    if treatment not in ("raised", "inset", "flat"):
+        raise InputError("QR treatment must be raised, inset, or flat.")
+    construction = data.get("construction", "single")
+    if construction not in ("single", "two-piece"):
+        raise InputError("Print construction is not supported.")
+    if construction == "two-piece" and treatment != "inset":
+        raise InputError("Two-piece construction is available only for inset tokens.")
     requested_base = number(data, "base", 1, 0.6, 8)
     requested_relief = number(data, "relief", 1, 0.24, 2)
     base_layers = max(1, math.ceil((requested_base - first) / layer - 1e-8) + 1)
-    minimum_top_layers = 5 if treatment == "inset" else 2
-    qr_layers = max(minimum_top_layers, math.ceil(requested_relief / layer - 1e-8))
     base = round(first + (base_layers - 1) * layer, 6)
-    relief = round(qr_layers * layer, 6)
+    minimum_top_layers = 5 if treatment == "inset" else 2
+    qr_layers = (
+        base_layers
+        if treatment == "flat"
+        else max(minimum_top_layers, math.ceil(requested_relief / layer - 1e-8))
+    )
+    relief = 0 if treatment == "flat" else round(qr_layers * layer, 6)
     warnings = []
-    if abs(base - requested_base) > 1e-6 or abs(relief - requested_relief) > 1e-6:
+    if abs(base - requested_base) > 1e-6 or (treatment != "flat" and abs(relief - requested_relief) > 1e-6):
         feature = "light top field" if treatment == "inset" else "QR"
-        warnings.append(f"Heights rounded up to complete layers: {base:g} mm base + {relief:g} mm {feature}.")
+        if treatment == "flat":
+            warnings.append(f"Thickness rounded up to complete layers: {base:g} mm.")
+        else:
+            warnings.append(
+                f"Heights rounded up to complete layers: {base:g} mm base + {relief:g} mm {feature}."
+            )
     correction = data.get("correction", "M")
     if correction not in ("M", "Q", "H"):
         raise InputError("Error correction must be M, Q, or H.")
@@ -858,7 +905,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
         module = module_size_for_outline(usable_outline, len(matrix))
     slices = (
         combined_base_slices(edge_profile, edge_size, top_profile, top_size, base)
-        if treatment == "raised"
+        if treatment in ("raised", "flat")
         else edge_slices(edge_profile, edge_size, base)
     )
     if module < 1.2:
@@ -910,7 +957,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
         edge_slices=slices,
         top_profile=top_profile,
         top_size=top_size,
-        top_slices=top_edge_slices(top_profile, top_size, relief),
+        top_slices=[] if treatment == "flat" else top_edge_slices(top_profile, top_size, relief),
         diameter=diameter,
         minimum_diameter=minimum_diameter,
         minimum_height=minimum_height,
@@ -938,6 +985,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
         warnings=warnings,
         correction=correction,
         treatment=treatment,
+        construction=construction,
         base_filament=slots[0],
         qr_filament=slots[1],
     )

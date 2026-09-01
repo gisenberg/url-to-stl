@@ -83,6 +83,35 @@ def test_inset_geometry_is_connected_watertight_and_scannable():
     test_printed_top_geometry_decodes_exact_url(token, mesh)
 
 
+def test_flat_token_has_complementary_watertight_material_parts():
+    token = create_token({"url": "https://example.com", "treatment": "flat", "base": 1})
+    assert token.height == token.base == 1
+    assert token.relief == 0
+    assert token.change_z is None
+    assert token.info()["change_layer"] is None
+    mesh = token.mesh()
+    parts = token.part_meshes()
+    assert mesh.is_watertight and mesh.is_winding_consistent
+    assert [part["name"] for part in parts] == ["Background", "QR"]
+    assert [part["filament"] for part in parts] == [1, 2]
+    assert all(part["mesh"].is_watertight and part["mesh"].is_winding_consistent for part in parts)
+    assert sum(part["mesh"].volume for part in parts) == pytest.approx(mesh.volume, rel=1e-6)
+
+
+def test_two_piece_inset_creates_bed_ready_base_and_cap():
+    token = create_token({"url": "https://example.com", "treatment": "inset", "construction": "two-piece"})
+    assert token.change_z is None
+    parts = token.part_meshes()
+    assert [part["name"] for part in parts] == ["Dark base", "Light QR cap"]
+    assert parts[0]["mesh"].bounds[0][2] == pytest.approx(0)
+    assert parts[0]["mesh"].bounds[1][2] == pytest.approx(token.base)
+    assert parts[1]["mesh"].bounds[0][2] == pytest.approx(0)
+    assert parts[1]["mesh"].bounds[1][2] == pytest.approx(token.relief)
+    mesh = token.mesh()
+    assert mesh.is_watertight and mesh.is_winding_consistent
+    assert mesh.extents[0] > token.shape_width * 2
+
+
 @pytest.mark.parametrize(
     "shape,minimum_width",
     [("circle", 40), ("square", 30), ("rectangle", 30), ("pentagon", 51), ("hexagon", 44)],
@@ -328,6 +357,30 @@ def test_inset_3mf_keeps_one_layer_change(template):
     assert report["treatment"] == "inset"
 
 
+@pytest.mark.parametrize(
+    ("data", "part_names"),
+    [
+        ({"treatment": "flat"}, ["Background", "QR"]),
+        ({"treatment": "inset", "construction": "two-piece"}, ["Dark base", "Light QR cap"]),
+    ],
+)
+def test_material_part_3mf_uses_two_meshes_without_a_fake_layer_event(template, data, part_names):
+    token = create_token({"url": "https://example.com", **data})
+    blob = export_project(template, token, token.mesh())
+    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+        assert "3D/Objects/object_1.model" in archive.namelist()
+        assert "3D/Objects/object_2.model" in archive.namelist()
+        events = ET.fromstring(archive.read("Metadata/custom_gcode_per_layer.xml"))
+        config = ET.fromstring(archive.read("Metadata/model_settings.config"))
+        report = json.loads(archive.read("Metadata/qr_token.json"))
+    assert events.findall("./plate/layer") == []
+    parts = config.findall("./object/part")
+    assert [part.find('./metadata[@key="name"]').get("value") for part in parts] == part_names
+    assert [part.find('./metadata[@key="extruder"]').get("value") for part in parts] == ["1", "2"]
+    assert [part["name"] for part in report["parts"]] == part_names
+    assert report["change_z"] is None
+
+
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), None, "bad", -1, 0])
 def test_rejects_bad_dimensions(value):
     with pytest.raises(InputError):
@@ -404,6 +457,9 @@ def test_different_patterns_survive_stl_welding(url, correction):
         {"center_icon": "myspace"},
         {"module_style": "dots", "center_icon": "instagram"},
         {"finder_style": "rounded", "center_icon": "instagram"},
+        {"treatment": "raised", "construction": "two-piece"},
+        {"treatment": "flat", "construction": "two-piece"},
+        {"construction": "hinged"},
         {"shape": "rectangle", "shape_height": 10},
     ],
 )

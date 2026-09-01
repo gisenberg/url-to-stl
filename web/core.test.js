@@ -4,6 +4,7 @@ import test from 'node:test';
 import ManifoldModule from 'manifold-3d';
 import {
   InputError,
+  buildMaterialMeshes,
   buildMesh,
   buildPreviewParts,
   createToken,
@@ -67,6 +68,9 @@ test('rejects invalid URLs, dimensions, colors, and filament assignments', () =>
     { url: 'https://example.com', center_icon: 'myspace' },
     { url: 'https://example.com', module_style: 'dots', center_icon: 'instagram' },
     { url: 'https://example.com', finder_style: 'rounded', center_icon: 'instagram' },
+    { url: 'https://example.com', treatment: 'raised', construction: 'two-piece' },
+    { url: 'https://example.com', treatment: 'flat', construction: 'two-piece' },
+    { url: 'https://example.com', construction: 'hinged' },
     { url: 'https://example.com', base_color: '#000000', qr_color: '#FFFFFF' },
     { url: 'https://example.com', base_filament: 1, qr_filament: 1 },
   ]) assert.throws(() => createToken(input, parsed.profile), InputError);
@@ -102,6 +106,35 @@ test('builds an inset QR as one recessed watertight solid', () => {
   assert.ok(mesh.volume > 0);
   assert.deepEqual(mesh.bounds.min.map(value => Math.round(value)), [-30, -30, 0]);
   assert.deepEqual(mesh.bounds.max.map(value => Math.round(value)), [30, 30, 2]);
+});
+
+test('builds a flat token as complementary flush material parts', () => {
+  const token = createToken({ url: 'https://example.com', treatment: 'flat', base: 1 }, parsed.profile);
+  assert.equal(token.height, 1);
+  assert.equal(token.relief, 0);
+  assert.equal(token.change_layer, null);
+  assert.equal(token.change_z, null);
+  const mesh = buildMesh(manifold, token);
+  const parts = buildMaterialMeshes(manifold, token);
+  assert.deepEqual(parts.map(part => part.name), ['Background', 'QR']);
+  assert.deepEqual(parts.map(part => part.filament), [1, 2]);
+  assert.ok(parts.every(part => part.mesh.triangles.length > 0 && part.mesh.volume > 0));
+  assert.ok(Math.abs(parts.reduce((sum, part) => sum + part.mesh.volume, 0) - mesh.volume) < 1e-4);
+});
+
+test('builds an inset base and cap as independent printable pieces', () => {
+  const token = createToken({
+    url: 'https://example.com', treatment: 'inset', construction: 'two-piece',
+  }, parsed.profile);
+  assert.equal(token.change_layer, null);
+  const parts = buildMaterialMeshes(manifold, token);
+  assert.deepEqual(parts.map(part => part.name), ['Dark base', 'Light QR cap']);
+  assert.equal(parts[0].mesh.bounds.min[2], 0);
+  assert.equal(parts[0].mesh.bounds.max[2], token.base);
+  assert.equal(parts[1].mesh.bounds.min[2], 0);
+  assert.equal(parts[1].mesh.bounds.max[2], token.relief);
+  const mesh = buildMesh(manifold, token);
+  assert.ok(mesh.bounds.max[0] - mesh.bounds.min[0] > token.shape_width * 2);
 });
 
 test('builds every supported token shape as printable watertight geometry', () => {
@@ -249,4 +282,26 @@ test('packages the native Bambu settings and exactly one layer tool change', asy
   assert.equal(contents.settings.initial_layer_print_height, '0.2');
   assert.equal(contents.settings.machine_start_gcode, parsed.template.settings.machine_start_gcode);
   assert.equal(contents.report.mesh.watertight, true);
+});
+
+test('packages flat and two-piece modes as two material parts without a fake layer event', async () => {
+  for (const settings of [
+    { treatment: 'flat' },
+    { treatment: 'inset', construction: 'two-piece' },
+  ]) {
+    const token = createToken({ url: 'https://example.com', ...settings }, parsed.profile);
+    token.scan_verified = true;
+    const mesh = buildMesh(manifold, token);
+    const parts = buildMaterialMeshes(manifold, token);
+    const filename = await tokenFilename(token);
+    const project = encodeBambu3mf(
+      parsed.template, parsed.profile, token, mesh, filename, new Uint8Array([1, 2, 3]), parts,
+    );
+    const contents = inspect3mf(project);
+    assert.ok(contents.names.includes('3D/Objects/object_1.model'));
+    assert.ok(contents.names.includes('3D/Objects/object_2.model'));
+    assert.equal((contents.events.match(/<layer\s/g) || []).length, 0);
+    assert.equal(contents.report.parts.length, 2);
+    assert.equal(contents.report.change_z, null);
+  }
 });

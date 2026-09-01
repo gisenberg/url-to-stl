@@ -2,6 +2,7 @@ import * as THREE from './vendor/three.module.js';
 import ManifoldModule from 'manifold-3d';
 import jsQR from 'jsqr';
 import {
+  buildMaterialMeshes,
   buildMesh,
   buildPreviewParts,
   createToken,
@@ -95,13 +96,36 @@ function updateFields() {
     inset: 'A short shoulder steps the top surface inward.',
     tapered: 'The upper wall angles inward toward the top surface.',
   }[topProfile];
-  const inset = $('treatment').value === 'inset';
+  const treatment = $('treatment').value;
+  const inset = treatment === 'inset';
+  const flat = treatment === 'flat';
+  if (!inset) $('construction').value = 'single';
+  const twoPiece = inset && $('construction').value === 'two-piece';
+  const twoPieceMaximum = Math.floor((Math.min(
+    profile?.max_width || profile?.max_diameter || 200,
+    profile?.max_height || profile?.max_diameter || 200,
+  ) - 6) / 2);
+  if (twoPiece) {
+    $('diameter').max = String(twoPieceMaximum);
+    $('shape_height').max = String(twoPieceMaximum);
+    if (Number($('diameter').value) > twoPieceMaximum) $('diameter').value = String(twoPieceMaximum);
+    if (Number($('shape_height').value) > twoPieceMaximum) $('shape_height').value = String(twoPieceMaximum);
+  }
+  $('construction-row').hidden = !inset;
+  $('construction-note').textContent = twoPiece
+    ? `The dark base and perforated light cap are separate bed-ready parts. Dimensions are limited to ${twoPieceMaximum} mm so both fit with prime-tower clearance.`
+    : 'The base and top field print as one assembled model with one automatic AMS swap.';
   $('relief').min = String(inset ? Math.max(.24, Number($('layer_height').value) * 5) : .24);
+  $('relief-row').hidden = flat;
+  $('relief').disabled = flat;
+  $('base-label').textContent = flat ? 'Total thickness' : 'Base thickness';
   $('relief-label').textContent = inset ? 'Light cover thickness' : 'Raised QR';
-  $('qr-filament-label').textContent = inset ? 'Top filament' : 'QR filament';
+  $('qr-filament-label').textContent = inset ? (twoPiece ? 'Cap filament' : 'Top filament') : 'QR filament';
   $('treatment-note').textContent = inset
     ? 'The dark base shows through the QR openings. After one AMS swap, at least five light layers form an opaque top field.'
-    : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
+    : flat
+      ? 'The dark QR and light background are complementary material parts with one level top surface. Bambu Studio assigns each part to its AMS filament.'
+      : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
   const centerBadge = $('center_icon').value !== 'none';
   $('module_style').disabled = centerBadge;
   $('finder_style').disabled = centerBadge;
@@ -118,17 +142,20 @@ function updateFields() {
 function applyDiameterLimits(next) {
   const control = $('diameter');
   const minimum = next.preset === 'business-card' ? next.minimum_diameter : Math.ceil(next.minimum_diameter);
-  const maximum = Math.floor(profile?.max_width || profile?.max_diameter || 200);
+  const maximum = next.construction === 'two-piece'
+    ? Math.floor((Math.min(profile?.max_width || profile?.max_diameter || 200, profile?.max_height || profile?.max_diameter || 200) - 6) / 2)
+    : Math.floor(profile?.max_width || profile?.max_diameter || 200);
   control.min = String(minimum);
   control.max = String(maximum);
   control.value = String(next.diameter);
   const heightControl = $('shape_height');
   const minimumHeight = next.preset === 'business-card' ? next.minimum_height : Math.ceil(next.minimum_height);
-  const maximumHeight = Math.floor(profile?.max_height || profile?.max_diameter || 200);
+  const maximumHeight = next.construction === 'two-piece'
+    ? maximum : Math.floor(profile?.max_height || profile?.max_diameter || 200);
   heightControl.min = String(minimumHeight);
   heightControl.max = String(maximumHeight);
   heightControl.value = String(next.shape_height);
-  $('relief').value = String(next.relief);
+  if (next.treatment !== 'flat') $('relief').value = String(next.relief);
   $('diameter-min').textContent = `${measurement(minimum)} mm minimum`;
   $('diameter-max').textContent = `${maximum} mm maximum`;
   $('height-min').textContent = `${measurement(minimumHeight)} mm minimum`;
@@ -160,18 +187,39 @@ async function refresh() {
     const width = Number(token.shape_width.toFixed(2));
     const height = Number(token.shape_height.toFixed(2));
     $('dimension-text').textContent = token.shape === 'circle' ? `Ø ${width} mm` : `${width} × ${height} mm`;
-    $('swap-title').textContent = `Change before layer ${token.change_layer}`;
+    const multipart = token.treatment === 'flat' || token.construction === 'two-piece';
+    $('swap-title').textContent = token.treatment === 'flat' ? 'Two flush material parts'
+      : token.construction === 'two-piece' ? 'Two independent pieces'
+        : `Change before layer ${token.change_layer}`;
+    $('swap-count').innerHTML = multipart ? '<b>2</b> MATERIAL PARTS' : '<b>1</b> AMS SWAP';
     $('base-track').style.flex = token.base_layers;
     $('qr-track').style.flex = token.qr_layers;
     $('base-track').style.background = token.base_color;
     $('qr-track').style.background = token.qr_color;
     $('base-track').style.color = token.treatment === 'inset' ? '#ffffff' : '#20342b';
     $('qr-track').style.color = token.treatment === 'inset' ? '#20342b' : '#ffffff';
-    $('base-track-label').textContent = `1–${token.base_layers} · Base`;
-    $('qr-track-label').textContent = `${token.change_layer}–${token.base_layers + token.qr_layers} · ${token.treatment === 'inset' ? 'Top field' : 'QR'}`;
-    $('swap-description').textContent = token.treatment === 'inset'
-      ? `Dark filament ${token.base_filament} → light filament ${token.qr_filament} at Z ${token.change_z} mm. ${token.qr_layers} light layers form the top field around the recessed dark QR. No manual pause.`
-      : `Filament ${token.base_filament} → ${token.qr_filament} at Z ${token.change_z} mm (first QR layer). Base ends at ${token.base} mm. No manual pause.`;
+    $('base-track-label').textContent = token.treatment === 'flat'
+      ? `1–${token.base_layers} · Background`
+      : `1–${token.base_layers} · Base`;
+    $('qr-track-label').textContent = token.treatment === 'flat'
+      ? `1–${token.qr_layers} · QR`
+      : token.construction === 'two-piece'
+        ? `1–${token.qr_layers} · Cap`
+        : `${token.change_layer}–${token.base_layers + token.qr_layers} · ${token.treatment === 'inset' ? 'Top field' : 'QR'}`;
+    $('swap-description').textContent = token.treatment === 'flat'
+      ? `Light background filament ${token.base_filament} and dark QR filament ${token.qr_filament} print as complementary flush parts. Bambu Studio manages the AMS changes by part.`
+      : token.construction === 'two-piece'
+        ? `Dark base filament ${token.base_filament} and light cap filament ${token.qr_filament} are laid out separately on the plate. Print, align, and bond the two pieces after printing.`
+        : token.treatment === 'inset'
+          ? `Dark filament ${token.base_filament} → light filament ${token.qr_filament} at Z ${token.change_z} mm. ${token.qr_layers} light layers form the top field around the recessed dark QR. No manual pause.`
+          : `Filament ${token.base_filament} → ${token.qr_filament} at Z ${token.change_z} mm (first QR layer). Base ends at ${token.base} mm. No manual pause.`;
+    $('download-3mf-detail').textContent = multipart ? 'Project with material-assigned parts' : 'Project with AMS layer change';
+    $('download-stl-detail').textContent = token.construction === 'two-piece'
+      ? 'Both independent pieces laid out together'
+      : token.treatment === 'flat' ? 'Colorless unified geometry' : 'Printable model without project settings';
+    $('export-note').innerHTML = multipart
+      ? 'Open the 3MF as a <strong>project</strong>, slice, and check both material assignments.<br>STL retains geometry but cannot retain filament assignments.'
+      : 'Open the 3MF as a <strong>project</strong>, slice, and check the preview.<br>Use the arrow for STL geometry without the filament change.';
     drawScan();
     const scanContext = $('scan-canvas').getContext('2d', { willReadFrequently: true });
     const scan = jsQR(scanContext.getImageData(0, 0, $('scan-canvas').width, $('scan-canvas').height).data,
@@ -357,10 +405,28 @@ async function updateModel(nextToken, currentGeneration) {
   const top = new THREE.Mesh(createGeometry(parts.top),
     new THREE.MeshStandardMaterial({color: nextToken.qr_color, roughness: .92, metalness: 0}));
   top.castShadow = true; top.receiveShadow = true; group.add(top);
+  group.userData.basePart = base;
+  group.userData.topPart = top;
+  arrangeModelParts();
   scene.add(group);
   distance = viewMode === 'detail' ? Math.max(Math.max(nextToken.shape_width, nextToken.shape_height) * 1.85, 90) : bedSpan * 1.68;
   updateViewLabels();
   render();
+}
+function arrangeModelParts() {
+  if (!group?.userData.basePart || !group?.userData.topPart) return;
+  const basePart = group.userData.basePart;
+  const topPart = group.userData.topPart;
+  basePart.position.set(0, 0, 0);
+  topPart.position.set(0, 0, 0);
+  if (token?.construction !== 'two-piece') return;
+  if (viewMode === 'bed') {
+    const spacing = token.shape_width / 2 + 3;
+    basePart.position.x = -spacing;
+    topPart.position.x = spacing;
+  } else {
+    topPart.position.y = token.base + 2;
+  }
 }
 function render() {
   if (!renderer) return;
@@ -390,6 +456,7 @@ function switchView(view) {
     $(`view-${mode}`).setAttribute('aria-pressed', String(active));
   }
   updateViewLabels();
+  arrangeModelParts();
   render();
 }
 function updateViewLabels() {
@@ -398,7 +465,9 @@ function updateViewLabels() {
     const edges = [token.edge_profile, token.top_profile].filter(profile => profile !== 'straight');
     const edge = edges.length ? ` · ${edges.map(profile => profile.toUpperCase()).join(' / ')} EDGE` : '';
     const label = token.preset === 'business-card' ? 'BUSINESS CARD' : token.shape.toUpperCase();
-    $('bed-reference').textContent = `${label} ${token.treatment.toUpperCase()} · ${token.relief} MM ${token.treatment === 'inset' ? 'DEEP' : 'HIGH'}${edge}`;
+    const depth = token.treatment === 'flat' ? `${token.height} MM THICK`
+      : `${token.relief} MM ${token.treatment === 'inset' ? 'DEEP' : 'HIGH'}`;
+    $('bed-reference').textContent = `${label} ${token.treatment.toUpperCase()} · ${depth}${edge}`;
     $('orbit-hint').textContent = 'TRUE DEPTH · DRAG TO ROTATE · SCROLL TO ZOOM';
   } else {
     $('bed-reference').textContent = `${profile.printer.replace('Bambu Lab ', '')} BED · ${profile.bed_width} × ${profile.bed_depth} MM`;
@@ -444,11 +513,16 @@ async function download(kind) {
         blob = new Blob([encodeBinaryStl(mesh)], { type: 'model/stl' });
       } else {
         const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
-        blob = new Blob([encodeBambu3mf(template, profile, token, mesh, filename, pngBytes)], { type: 'model/3mf' });
+        const materialParts = token.treatment === 'flat' || token.construction === 'two-piece'
+          ? buildMaterialMeshes(module, token) : [];
+        blob = new Blob([encodeBambu3mf(template, profile, token, mesh, filename, pngBytes, materialParts)], { type: 'model/3mf' });
       }
     }
     saveBlob(blob, `${filename}.${kind}`);
-    notice(kind === '3mf' ? 'Bambu project downloaded with the automatic filament change included.' : `${kind.toUpperCase()} downloaded.${kind === 'stl' ? ' The layer change is included only in the 3MF export.' : ''}`, 'success');
+    const projectMessage = token.treatment === 'flat' || token.construction === 'two-piece'
+      ? 'Bambu project downloaded with both material-assigned parts.'
+      : 'Bambu project downloaded with the automatic filament change included.';
+    notice(kind === '3mf' ? projectMessage : `${kind.toUpperCase()} downloaded.${kind === 'stl' ? ' Filament assignments are included only in the 3MF export.' : ''}`, 'success');
   } catch (error) {
     notice(error.message, 'error');
   } finally {

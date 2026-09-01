@@ -23,10 +23,24 @@ def inspect_gcode(gcode, token, picture):
     layer_z, layer_num, current_tool = None, 0, token.base_filament - 1
     changes = []
     x, y, width = 0.0, 0.0, 0.42
-    image = Image.new("RGB", (1200, 1200), "white")
+    two_piece = token.construction == "two-piece"
+    flat = token.treatment == "flat"
+    image = Image.new("RGB", (1200, 1200), "black" if two_piece else "white")
     draw = ImageDraw.Draw(image)
-    scale = 1100 / token.diameter
-    top = token.base + token.relief
+    scale = 1100 / max(token.shape_width, token.shape_height)
+    spacing = token.shape_width / 2 + 3
+    base_center = (128 - spacing, 128) if two_piece else (128, 128)
+    qr_center = (128 + spacing, 128) if two_piece else (128, 128)
+    top = token.relief if two_piece else token.height
+    model_tools = set()
+
+    def inside(center, points):
+        return all(
+            abs(px - center[0]) <= token.shape_width / 2 + 1
+            and abs(py - center[1]) <= token.shape_height / 2 + 1
+            for px, py in points
+        )
+
     for line in lines:
         if line.startswith("; CHANGE_LAYER"):
             layer_num += 1
@@ -44,14 +58,25 @@ def inspect_gcode(gcode, token, picture):
             continue
         params = {m[1]: float(m[2]) for m in re.finditer(r"([XYZEIJ])(-?(?:\d+\.?\d*|\.\d+))", command)}
         nx, ny = params.get("X", x), params.get("Y", y)
-        # Inspect extrusions on the actual token, excluding the distant prime tower.
-        within = all(
-            128 - token.diameter / 2 - 1 <= v <= 128 + token.diameter / 2 + 1 for v in (x, y, nx, ny)
-        )
-        if within and layer_z is not None and params.get("E", 0) > 0 and (nx != x or ny != y):
-            expected = token.base_filament - 1 if layer_z <= token.base + 1e-5 else token.qr_filament - 1
-            assert current_tool == expected, f"Wrong filament on model at Z={layer_z}"
-            if abs(layer_z - top) < 1e-5:
+        segment = [(x, y), (nx, ny)]
+        base_inside = inside(base_center, segment)
+        qr_inside = inside(qr_center, segment)
+        within = base_inside or qr_inside
+        extrusion = within and layer_z is not None and params.get("E", 0) > 0 and (nx != x or ny != y)
+        if extrusion:
+            model_tools.add(current_tool)
+            if two_piece:
+                expected = token.base_filament - 1 if base_inside and not qr_inside else token.qr_filament - 1
+                assert current_tool == expected, f"Wrong filament on independent piece at Z={layer_z}"
+            elif not flat:
+                expected = token.base_filament - 1 if layer_z <= token.base + 1e-5 else token.qr_filament - 1
+                assert current_tool == expected, f"Wrong filament on model at Z={layer_z}"
+            should_draw = abs(layer_z - top) < 1e-5 and (
+                (two_piece and qr_inside and current_tool == token.qr_filament - 1)
+                or (flat and current_tool == token.qr_filament - 1)
+                or (not two_piece and not flat)
+            )
+            if should_draw:
                 path = [(x, y), (nx, ny)]
                 if command.startswith(("G2 ", "G3 ")):
                     cx, cy = x + params.get("I", 0), y + params.get("J", 0)
@@ -69,21 +94,27 @@ def inspect_gcode(gcode, token, picture):
                         for i in range(steps + 1)
                     ]
                 points = [
-                    (round(600 + (px - 128) * scale), round(600 - (py - 128) * scale)) for px, py in path
+                    (round(600 + (px - qr_center[0]) * scale), round(600 - (py - qr_center[1]) * scale))
+                    for px, py in path
                 ]
                 stroke = max(1, round(width * scale))
-                draw.line(points, fill="black", width=stroke, joint="curve")
+                ink = "white" if two_piece else "black"
+                draw.line(points, fill=ink, width=stroke, joint="curve")
                 for px, py in [points[0], points[-1]]:
                     r = stroke / 2
-                    draw.ellipse((px - r, py - r, px + r, py + r), fill="black")
+                    draw.ellipse((px - r, py - r, px + r, py + r), fill=ink)
         x, y = nx, ny
-    assert changes == [(token.base_layers + 1, token.change_z)], changes
+    if token.change_z is not None:
+        assert changes == [(token.base_layers + 1, token.change_z)], changes
+    else:
+        assert {token.base_filament - 1, token.qr_filament - 1}.issubset(model_tools), model_tools
     image.save(picture)
     result = zxingcpp.read_barcode(image)
     assert result is not None and result.text == token.url, "Sliced top-layer toolpaths did not decode"
     return {
-        "change_layer": changes[0][0],
-        "change_z": changes[0][1],
+        "change_layer": changes[0][0] if token.change_z is not None else None,
+        "change_z": changes[0][1] if token.change_z is not None else None,
+        "toolchange_count": len(changes),
         "toolpaths_decode": result.text,
         "correct_filament_on_every_model_layer": True,
     }
@@ -102,6 +133,8 @@ def main():
     cases = [
         ("standard", {}),
         ("inset", {"treatment": "inset"}),
+        ("flat", {"treatment": "flat"}),
+        ("inset-two-piece", {"treatment": "inset", "construction": "two-piece"}),
         ("inset-square", {"treatment": "inset", "shape": "square"}),
         ("inset-rectangle", {"treatment": "inset", "shape": "rectangle"}),
         ("inset-pentagon", {"treatment": "inset", "shape": "pentagon"}),
@@ -173,21 +206,31 @@ def main():
         report = json.loads((path / "result.json").read_text())
         assert report["return_code"] == 0
         plate = report["sliced_plates"][0]
-        assert plate["filament_change_times"] == plate["layer_filament_change"] == 1
+        if token.change_z is not None:
+            assert plate["filament_change_times"] == plate["layer_filament_change"] == 1
+        else:
+            assert plate["filament_change_times"] >= 1
         assert not plate.get("warning_message")
         with zipfile.ZipFile(path / "sliced.3mf") as z:
             assert z.testzip() is None
             layers = ET.fromstring(z.read("Metadata/custom_gcode_per_layer.xml")).findall("./plate/layer")
-            assert len(layers) == 1
-            assert (
-                float(layers[0].get("top_z")) == token.change_z
-                or abs(float(layers[0].get("top_z")) - token.change_z) < 1e-6
-            )
+            assert len(layers) == (0 if token.change_z is None else 1)
+            if token.change_z is not None:
+                assert (
+                    float(layers[0].get("top_z")) == token.change_z
+                    or abs(float(layers[0].get("top_z")) - token.change_z) < 1e-6
+                )
             checks = inspect_gcode(z.read("Metadata/plate_1.gcode").decode(), token, path / "sliced-top.png")
         results.append(
-            {"case": name, "bambu_result": "Success", "filament_changes": 1, "warning_message": "", **checks}
+            {
+                "case": name,
+                "bambu_result": "Success",
+                "filament_changes": plate["filament_change_times"],
+                "warning_message": "",
+                **checks,
+            }
         )
-        print(f"PASS {name}: one AMS change, correct model-layer colors, sliced QR decodes.", flush=True)
+        print(f"PASS {name}: correct material assignment and sliced QR decodes.", flush=True)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(
         json.dumps(

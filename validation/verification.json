@@ -1,7 +1,7 @@
 {
   "unit_tests": {
-    "python_passed": 116,
-    "browser_core_passed": 15,
+    "python_passed": 123,
+    "browser_core_passed": 18,
     "failed": 0
   },
   "lint": "Ruff and JavaScript syntax checks passed",
@@ -151,6 +151,32 @@
       "styled-square-center-instagram",
       "styled-faceted-circle"
     ],
+    "flat_mode": {
+      "material_parts": [
+        "Background",
+        "QR"
+      ],
+      "flush_surface": true,
+      "custom_layer_events": 0,
+      "browser_generated_3mf_native_verified": true,
+      "native_bambu_slice": "Success",
+      "native_filament_changes": 5,
+      "sliced_toolpaths_decode": "https://example.com"
+    },
+    "two_piece_inset": {
+      "material_parts": [
+        "Dark base",
+        "Light QR cap"
+      ],
+      "plate_gap_mm": 6,
+      "x2d_max_dimension_mm": 95,
+      "bed_preview_uses_separate_layout": true,
+      "custom_layer_events": 0,
+      "browser_generated_3mf_native_verified": true,
+      "native_bambu_slice": "Success",
+      "native_filament_changes": 5,
+      "sliced_cap_toolpaths_decode": "https://example.com"
+    },
     "independent_rectangle_dimensions": true,
     "top_edge_profiles": [
       "straight",
@@ -159,7 +185,7 @@
       "inset",
       "tapered"
     ],
-    "native_bambu_case_count": 16
+    "native_bambu_case_count": 18
   },
   "physical_print_tested": false
 }

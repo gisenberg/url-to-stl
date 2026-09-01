@@ -145,8 +145,12 @@ def prepare_settings(template, token):
     else:
         matrix = [str(v) for v in matrix]
     for block in range(blocks):
-        index = block * count * count + (token.base_filament - 1) * count + token.qr_filament - 1
-        matrix[index] = str(max(280, float(matrix[index])))
+        for source, destination in (
+            (token.base_filament, token.qr_filament),
+            (token.qr_filament, token.base_filament),
+        ):
+            index = block * count * count + (source - 1) * count + destination - 1
+            matrix[index] = str(max(280, float(matrix[index])))
     settings["flush_volumes_matrix"] = matrix
     # A token sits at the center. Keep the prime tower well away from it.
     settings["wipe_tower_x"] = ["18"]
@@ -161,6 +165,23 @@ def export_project(template, token, mesh):
             "Token is too large for this bed with prime-tower clearance. "
             f"Maximum size: {geometry['max_width']:g} × {geometry['max_height']:g} mm."
         )
+    project_parts = [{"name": "Token", "filament": token.base_filament, "mesh": mesh}]
+    if token.treatment == "flat":
+        project_parts = token.part_meshes()
+    elif token.construction == "two-piece":
+        project_parts = token.part_meshes()
+        gap = 6
+        if token.shape_width * 2 + gap <= geometry["max_width"]:
+            offsets = [(-(token.shape_width / 2 + gap / 2), 0, 0), (token.shape_width / 2 + gap / 2, 0, 0)]
+        elif token.shape_height * 2 + gap <= geometry["max_height"]:
+            offsets = [(0, -(token.shape_height / 2 + gap / 2), 0), (0, token.shape_height / 2 + gap / 2, 0)]
+        else:
+            raise InputError(
+                "Both inset pieces do not fit on this plate with prime-tower clearance. Reduce the token size."
+            )
+        for part, offset in zip(project_parts, offsets):
+            part["mesh"] = part["mesh"].copy()
+            part["mesh"].apply_translation(offset)
     cx, cy = geometry["center"]
     settings = prepare_settings(template, token)
 
@@ -174,69 +195,79 @@ def export_project(template, token, mesh):
             "Description",
             f"QR Token Studio {token.shape} with {token.corner_style} corners, a {token.edge_profile} lower edge, "
             f"a {token.top_profile} top edge, {token.module_style} QR modules, and {token.finder_style} finder eyes. "
-            f"{token.treatment.title()} QR treatment; "
-            f"change before layer {token.base_layers + 1}, top Z {token.change_z:g} mm.",
+            f"{token.treatment.title()} QR treatment. "
+            + (
+                f"Change before layer {token.base_layers + 1}, top Z {token.change_z:g} mm."
+                if token.change_z is not None
+                else "Material assignments are stored on independent model parts."
+            ),
         ),
     ]:
         ET.SubElement(root, f"{{{CORE}}}metadata", name=name).text = value
     root.set("xmlns:BambuStudio", "http://schemas.bambulab.com/package/2021")
     resources = ET.SubElement(root, f"{{{CORE}}}resources")
-    obj = ET.SubElement(resources, f"{{{CORE}}}object", id="2", type="model")
+    root_id = len(project_parts) + 1
+    obj = ET.SubElement(resources, f"{{{CORE}}}object", id=str(root_id), type="model")
     components = ET.SubElement(obj, f"{{{CORE}}}components")
-    ET.SubElement(
-        components,
-        f"{{{CORE}}}component",
-        {
-            "objectid": "1",
-            f"{{{PROD}}}path": "/3D/Objects/object_1.model",
-            "transform": "1 0 0 0 1 0 0 0 1 0 0 0",
-        },
-    )
+    for index in range(len(project_parts)):
+        ET.SubElement(
+            components,
+            f"{{{CORE}}}component",
+            {
+                "objectid": str(index + 1),
+                f"{{{PROD}}}path": f"/3D/Objects/object_{index + 1}.model",
+                "transform": "1 0 0 0 1 0 0 0 1 0 0 0",
+            },
+        )
     build = ET.SubElement(root, f"{{{CORE}}}build")
     ET.SubElement(
-        build, f"{{{CORE}}}item", objectid="2", printable="1", transform=f"1 0 0 0 1 0 0 0 1 {cx:g} {cy:g} 0"
+        build,
+        f"{{{CORE}}}item",
+        objectid=str(root_id),
+        printable="1",
+        transform=f"1 0 0 0 1 0 0 0 1 {cx:g} {cy:g} 0",
     )
 
-    model = ET.Element(f"{{{CORE}}}model", unit="millimeter")
-    res = ET.SubElement(model, f"{{{CORE}}}resources")
-    obj = ET.SubElement(res, f"{{{CORE}}}object", id="1", type="model")
-    mesh_xml = ET.SubElement(obj, f"{{{CORE}}}mesh")
-    vertices = ET.SubElement(mesh_xml, f"{{{CORE}}}vertices")
-    for x, y, z in mesh.vertices:
-        ET.SubElement(vertices, f"{{{CORE}}}vertex", x=f"{x:.9g}", y=f"{y:.9g}", z=f"{z:.9g}")
-    triangles = ET.SubElement(mesh_xml, f"{{{CORE}}}triangles")
-    for a, b, c in mesh.faces:
-        ET.SubElement(triangles, f"{{{CORE}}}triangle", v1=str(a), v2=str(b), v3=str(c))
-    ET.SubElement(model, f"{{{CORE}}}build")
+    def mesh_model(part_mesh, object_id):
+        model = ET.Element(f"{{{CORE}}}model", unit="millimeter")
+        res = ET.SubElement(model, f"{{{CORE}}}resources")
+        obj = ET.SubElement(res, f"{{{CORE}}}object", id=str(object_id), type="model")
+        mesh_xml = ET.SubElement(obj, f"{{{CORE}}}mesh")
+        vertices = ET.SubElement(mesh_xml, f"{{{CORE}}}vertices")
+        for x, y, z in part_mesh.vertices:
+            ET.SubElement(vertices, f"{{{CORE}}}vertex", x=f"{x:.9g}", y=f"{y:.9g}", z=f"{z:.9g}")
+        triangles = ET.SubElement(mesh_xml, f"{{{CORE}}}triangles")
+        for a, b, c in part_mesh.faces:
+            ET.SubElement(triangles, f"{{{CORE}}}triangle", v1=str(a), v2=str(b), v3=str(c))
+        ET.SubElement(model, f"{{{CORE}}}build")
+        return xml(model)
 
     config = ET.Element("config")
-    obj = ET.SubElement(config, "object", id="2")
+    obj = ET.SubElement(config, "object", id=str(root_id))
 
     def meta(parent, key, value):
         ET.SubElement(parent, "metadata", key=key, value=str(value))
 
     meta(obj, "name", token.filename)
-    meta(obj, "extruder", token.base_filament)
-    ET.SubElement(obj, "metadata", face_count=str(len(mesh.faces)))
-    part = ET.SubElement(obj, "part", id="1", subtype="normal_part")
-    feature = "raised QR" if token.treatment == "raised" else "inset QR field"
-    meta(
-        part,
-        "name",
-        f"{token.shape.title()} with {token.module_style} QR modules, {token.finder_style} finder eyes, "
-        f"{token.edge_profile} lower edge, {token.top_profile} top edge, and {feature}",
-    )
-    meta(part, "matrix", "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1")
-    ET.SubElement(
-        part,
-        "mesh_stat",
-        face_count=str(len(mesh.faces)),
-        edges_fixed="0",
-        degenerate_facets="0",
-        facets_removed="0",
-        facets_reversed="0",
-        backwards_edges="0",
-    )
+    if len(project_parts) == 1:
+        meta(obj, "extruder", project_parts[0]["filament"])
+    total_faces = sum(len(part["mesh"].faces) for part in project_parts)
+    ET.SubElement(obj, "metadata", face_count=str(total_faces))
+    for index, project_part in enumerate(project_parts, 1):
+        part = ET.SubElement(obj, "part", id=str(index), subtype="normal_part")
+        meta(part, "name", project_part["name"])
+        meta(part, "extruder", project_part["filament"])
+        meta(part, "matrix", "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1")
+        ET.SubElement(
+            part,
+            "mesh_stat",
+            face_count=str(len(project_part["mesh"].faces)),
+            edges_fixed="0",
+            degenerate_facets="0",
+            facets_removed="0",
+            facets_reversed="0",
+            backwards_edges="0",
+        )
     plate = ET.SubElement(config, "plate")
     for key, value in [
         ("plater_id", 1),
@@ -248,34 +279,36 @@ def export_project(template, token, mesh):
     ]:
         meta(plate, key, value)
     instance = ET.SubElement(plate, "model_instance")
-    for key, value in [("object_id", 2), ("instance_id", 0), ("identify_id", 1)]:
+    for key, value in [("object_id", root_id), ("instance_id", 0), ("identify_id", 1)]:
         meta(instance, key, value)
     ET.SubElement(config, "assemble")
 
     events = ET.Element("custom_gcodes_per_layer")
     plate_events = ET.SubElement(events, "plate")
     ET.SubElement(plate_events, "plate_info", id="1")
-    ET.SubElement(
-        plate_events,
-        "layer",
-        top_z=f"{token.change_z:g}",
-        type="2",
-        extruder=str(token.qr_filament),
-        color=token.qr_color,
-        extra="",
-        gcode="tool_change",
-    )
+    if token.change_z is not None:
+        ET.SubElement(
+            plate_events,
+            "layer",
+            top_z=f"{token.change_z:g}",
+            type="2",
+            extruder=str(token.qr_filament),
+            color=token.qr_color,
+            extra="",
+            gcode="tool_change",
+        )
     ET.SubElement(plate_events, "mode", value="MultiAsSingle")
 
-    def relationships(target):
+    def relationships(targets):
         rel = ET.Element("Relationships", xmlns=REL)
-        ET.SubElement(
-            rel,
-            "Relationship",
-            Target=target,
-            Id="rel-1",
-            Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel",
-        )
+        for index, target in enumerate(targets, 1):
+            ET.SubElement(
+                rel,
+                "Relationship",
+                Target=target,
+                Id=f"rel-{index}",
+                Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel",
+            )
         return xml(rel)
 
     types = ET.Element("Types", xmlns="http://schemas.openxmlformats.org/package/2006/content-types")
@@ -293,19 +326,30 @@ def export_project(template, token, mesh):
     report.pop("outline")
     report.pop("feature_outlines")
     report["profile"] = profile_info(template)
-    report["mesh"] = {"watertight": True, "triangles": len(mesh.faces), "volume_mm3": round(mesh.volume, 3)}
+    report["mesh"] = {
+        "watertight": True,
+        "triangles": total_faces,
+        "volume_mm3": round(sum(part["mesh"].volume for part in project_parts), 3),
+    }
+    report["parts"] = [
+        {"name": part["name"], "filament": part["filament"], "triangles": len(part["mesh"].faces)}
+        for part in project_parts
+    ]
     contents = {
         "[Content_Types].xml": xml(types),
-        "_rels/.rels": relationships("/3D/3dmodel.model"),
-        "3D/_rels/3dmodel.model.rels": relationships("/3D/Objects/object_1.model"),
+        "_rels/.rels": relationships(["/3D/3dmodel.model"]),
+        "3D/_rels/3dmodel.model.rels": relationships(
+            [f"/3D/Objects/object_{index}.model" for index in range(1, len(project_parts) + 1)]
+        ),
         "3D/3dmodel.model": xml(root),
-        "3D/Objects/object_1.model": xml(model),
         "Metadata/project_settings.config": json.dumps(settings, indent=2),
         "Metadata/model_settings.config": xml(config),
         "Metadata/custom_gcode_per_layer.xml": xml(events),
         "Metadata/plate_1.png": token.png(512),
         "Metadata/qr_token.json": json.dumps(report, indent=2, ensure_ascii=False),
     }
+    for index, project_part in enumerate(project_parts, 1):
+        contents[f"3D/Objects/object_{index}.model"] = mesh_model(project_part["mesh"], index)
     result = io.BytesIO()
     with zipfile.ZipFile(result, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         for path, data in contents.items():

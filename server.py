@@ -132,7 +132,7 @@ def export(kind):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="QR Token Studio: shaped QR tokens with Bambu AMS layer changes."
+        description="QR Token Studio: shaped QR tokens with Bambu AMS layer changes or material parts."
     )
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
@@ -170,7 +170,8 @@ def main():
     )
     parser.add_argument("--base", type=float, default=1)
     parser.add_argument("--relief", type=float, default=1)
-    parser.add_argument("--treatment", choices=("raised", "inset"), default="raised")
+    parser.add_argument("--treatment", choices=("raised", "inset", "flat"), default="raised")
+    parser.add_argument("--construction", choices=("single", "two-piece"), default="single")
     parser.add_argument("--layer-height", type=float, default=0.2)
     parser.add_argument("--first-layer", type=float, default=0.2)
     args = parser.parse_args()
