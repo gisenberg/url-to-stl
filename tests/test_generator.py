@@ -11,7 +11,7 @@ import zxingcpp
 from PIL import Image, ImageDraw
 
 from bambu_project import DEFAULT_TEMPLATE, export_project, profile_info, read_template
-from token_model import InputError, create_token
+from token_model import InputError, create_token, is_finder_cell
 
 
 @pytest.fixture(scope="module")
@@ -192,7 +192,7 @@ def test_business_card_preset_right_aligns_qr_and_prints_social_icons(icon):
     test_printed_top_geometry_decodes_exact_url(token, mesh)
 
 
-@pytest.mark.parametrize("module_style", ["square", "rounded", "dots", "faceted", "triangle"])
+@pytest.mark.parametrize("module_style", ["square", "rounded", "dots", "faceted", "triangle", "lines"])
 @pytest.mark.parametrize("finder_style", ["square", "rounded", "circle"])
 def test_print_safe_qr_styles_are_watertight_and_scannable(module_style, finder_style):
     token = create_token(
@@ -207,6 +207,45 @@ def test_print_safe_qr_styles_are_watertight_and_scannable(module_style, finder_
     assert token.module_style == module_style
     assert token.finder_style == finder_style
     assert token.feature_outlines()
+    mesh = token.mesh()
+    assert mesh.is_watertight
+    assert mesh.is_winding_consistent
+    test_printed_top_geometry_decodes_exact_url(token, mesh)
+
+
+def test_connected_modules_add_neighbor_bridges_and_scan():
+    token = create_token(
+        {
+            "url": "https://example.com",
+            "diameter": 80,
+            "treatment": "inset",
+            "module_style": "triangle",
+        }
+    )
+    eligible_cells = sum(
+        token.matrix[row][column] and not is_finder_cell(row, column, len(token.matrix))
+        for row in range(len(token.matrix))
+        for column in range(len(token.matrix))
+    )
+    assert len(token.feature_outlines()) > eligible_cells + 6
+    test_printed_top_geometry_decodes_exact_url(token, token.mesh())
+
+
+def test_outer_outline_preserves_quiet_zone_and_scans():
+    token = create_token(
+        {
+            "url": "https://example.com",
+            "diameter": 90,
+            "treatment": "inset",
+            "module_style": "lines",
+            "outer_frame": "outline",
+        }
+    )
+    assert token.outer_frame == "outline"
+    assert token.outer_frame_width >= 0.8
+    assert token.module * 0.56 >= 0.8 - 1e-6
+    assert token.correction == "H"
+    assert any("line modules" in warning for warning in token.warnings)
     mesh = token.mesh()
     assert mesh.is_watertight
     assert mesh.is_winding_consistent
@@ -513,6 +552,7 @@ def test_different_patterns_survive_stl_welding(url, correction):
         {"icon": "myspace"},
         {"icon": "instagram"},
         {"module_style": "hearts"},
+        {"outer_frame": "flower"},
         {"finder_style": "flower"},
         {"finder_center_style": "star"},
         {"finder_style": "square", "finder_center_style": "diamond"},

@@ -179,7 +179,29 @@
       "correct_filament_on_every_model_layer": true
     },
     {
-      "case": "styled-triangles",
+      "case": "styled-connected",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolchange_count": 1,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "styled-lines",
+      "bambu_result": "Success",
+      "filament_changes": 1,
+      "warning_message": "",
+      "change_layer": 6,
+      "change_z": 1.2,
+      "toolchange_count": 1,
+      "toolpaths_decode": "https://example.com",
+      "correct_filament_on_every_model_layer": true
+    },
+    {
+      "case": "outlined-lines",
       "bambu_result": "Success",
       "filament_changes": 1,
       "warning_message": "",

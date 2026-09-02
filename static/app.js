@@ -151,6 +151,7 @@ function updateFields() {
       ? 'The dark QR and light background are complementary material parts with one level top surface. Bambu Studio assigns each part to its AMS filament.'
       : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
   const centerBadge = $('center_icon').value !== 'none';
+  const lineModules = choiceValue('module_style') === 'lines';
   const finderFrame = choiceValue('finder_style');
   const centerOptions = form.querySelectorAll('input[name="finder_center_style"]');
   setChoiceGroupDisabled('module_style', centerBadge);
@@ -169,8 +170,8 @@ function updateFields() {
       setChoice('finder_center_style', finderFrame === 'circle' ? 'circle' : 'rounded');
     }
   }
-  $('correction').disabled = centerBadge;
-  if (centerBadge) $('correction').value = 'H';
+  $('correction').disabled = centerBadge || lineModules;
+  if (centerBadge || lineModules) $('correction').value = 'H';
   $('center-icon-note').textContent = centerBadge
     ? 'A protected light center is reserved. Classic modules, square finder frames and centers, and High error correction are locked because that combination survives slicing.'
     : 'Center badges reserve a protected light area and automatically use high error correction.';
@@ -293,7 +294,8 @@ function drawScan() {
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = inset ? token.base_color : token.qr_color;
   const classic = token.module_style === 'square' && token.finder_style === 'square'
-    && token.finder_center_style === 'square' && token.center_icon === 'none';
+    && token.finder_center_style === 'square' && token.center_icon === 'none'
+    && token.outer_frame === 'none';
   if (classic) {
     const pitch = token.module_size * scale;
     const half = token.modules * token.module_size / 2;

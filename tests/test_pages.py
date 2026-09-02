@@ -14,10 +14,13 @@ def test_pages_build_is_the_generator_without_server_routes():
         assert "Small token." not in html
         assert "Business card" in html
         assert "Brand icon" in html
-        assert "Module shape" in html
-        assert "Triangles" in html
+        assert "Shape style" in html
+        assert "Lines" in html
+        assert "Connected" in html
         assert "Finder frame" in html
         assert "Finder center" in html
+        assert "Outer framing" in html
+        assert '<details id="qr-advanced" open>' in html
         assert "Light border padding" in html
         assert "Corner radius" in html
         assert "Center badge" in html

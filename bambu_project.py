@@ -195,7 +195,8 @@ def export_project(template, token, mesh):
             "Description",
             f"QR Token Studio {token.shape} with {token.corner_style} corners, {token.padding:g} mm border padding, "
             f"a {token.edge_profile} lower edge, a {token.top_profile} top edge, {token.module_style} QR modules, "
-            f"{token.finder_style} finder frames, and {token.finder_center_style} finder centers. "
+            f"{token.finder_style} finder frames, {token.finder_center_style} finder centers, "
+            f"and {token.outer_frame} outer framing. "
             f"{token.treatment.title()} QR treatment. "
             + (
                 f"Change before layer {token.base_layers + 1}, top Z {token.change_z:g} mm."

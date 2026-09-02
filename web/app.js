@@ -158,6 +158,7 @@ function updateFields() {
       ? 'The dark QR and light background are complementary material parts with one level top surface. Bambu Studio assigns each part to its AMS filament.'
       : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
   const centerBadge = $('center_icon').value !== 'none';
+  const lineModules = choiceValue('module_style') === 'lines';
   const finderFrame = choiceValue('finder_style');
   const centerOptions = form.querySelectorAll('input[name="finder_center_style"]');
   setChoiceGroupDisabled('module_style', centerBadge);
@@ -176,8 +177,8 @@ function updateFields() {
       setChoice('finder_center_style', finderFrame === 'circle' ? 'circle' : 'rounded');
     }
   }
-  $('correction').disabled = centerBadge;
-  if (centerBadge) $('correction').value = 'H';
+  $('correction').disabled = centerBadge || lineModules;
+  if (centerBadge || lineModules) $('correction').value = 'H';
   $('center-icon-note').textContent = centerBadge
     ? 'A protected light center is reserved. Classic modules, square finder frames and centers, and High error correction are locked because that combination survives slicing.'
     : 'Center badges reserve a protected light area and automatically use high error correction.';
@@ -265,9 +266,29 @@ async function refresh() {
       : 'Open the 3MF as a <strong>project</strong>, slice, and check the preview.<br>Use the arrow for STL geometry without the filament change.';
     drawScan();
     const scanContext = $('scan-canvas').getContext('2d', { willReadFrequently: true });
-    const scan = jsQR(scanContext.getImageData(0, 0, $('scan-canvas').width, $('scan-canvas').height).data,
-      $('scan-canvas').width, $('scan-canvas').height,
-      { inversionAttempts: 'dontInvert' });
+    const scanImage = scanContext.getImageData(0, 0, $('scan-canvas').width, $('scan-canvas').height);
+    let scan = jsQR(scanImage.data, scanImage.width, scanImage.height, { inversionAttempts: 'dontInvert' });
+    if (!scan && token.module_style === 'lines') {
+      const normalized = new Uint8ClampedArray(scanImage.data);
+      const radius = Math.max(1, Math.ceil(token.module_size * 870
+        / Math.max(token.shape_width, token.shape_height) * .18));
+      for (let y = 0; y < scanImage.height; y++) {
+        for (let x = 0; x < scanImage.width; x++) {
+          const source = (y * scanImage.width + x) * 4;
+          if (scanImage.data[source] + scanImage.data[source + 1] + scanImage.data[source + 2] > 240) continue;
+          for (let offset = -radius; offset <= radius; offset++) {
+            const targetY = y + offset;
+            if (targetY < 0 || targetY >= scanImage.height) continue;
+            const target = (targetY * scanImage.width + x) * 4;
+            normalized[target] = scanImage.data[source];
+            normalized[target + 1] = scanImage.data[source + 1];
+            normalized[target + 2] = scanImage.data[source + 2];
+            normalized[target + 3] = 255;
+          }
+        }
+      }
+      scan = jsQR(normalized, scanImage.width, scanImage.height, { inversionAttempts: 'dontInvert' });
+    }
     if (!scan || scan.data !== token.url) throw new Error('The preview failed its independent QR scan check. Increase size or contrast.');
     token.scan_verified = true;
     await updateModel(token, current);
@@ -307,7 +328,8 @@ function drawScan() {
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = inset ? token.base_color : token.qr_color;
   const classic = token.module_style === 'square' && token.finder_style === 'square'
-    && token.finder_center_style === 'square' && token.center_icon === 'none';
+    && token.finder_center_style === 'square' && token.center_icon === 'none'
+    && token.outer_frame === 'none';
   if (classic) {
     const pitch = token.module_size * scale;
     const half = token.modules * token.module_size / 2;

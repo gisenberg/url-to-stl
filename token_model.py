@@ -65,9 +65,10 @@ CORNER_STYLES = {"default", "sharp", "softened", "rounded", "custom"}
 EDGE_PROFILES = {"straight", "chamfered", "rounded", "inset", "tapered"}
 TOKEN_PRESETS = {"custom", "business-card"}
 TOKEN_ICONS = {"none", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"}
-QR_MODULE_STYLES = {"square", "rounded", "dots", "faceted", "triangle"}
+QR_MODULE_STYLES = {"square", "rounded", "dots", "faceted", "triangle", "lines"}
 QR_FINDER_STYLES = {"square", "rounded", "circle"}
 QR_FINDER_CENTER_STYLES = {"square", "rounded", "circle", "diamond"}
+QR_OUTER_FRAMES = {"none", "outline"}
 QR_CENTER_ICONS = {"none", "blank", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"}
 FONT_AWESOME_BRANDS = json.loads(
     (Path(__file__).resolve().parent / "assets" / "fontawesome-brands.json").read_text(encoding="utf-8")
@@ -421,19 +422,19 @@ def styled_module_outline(style, center_x, center_y, pitch, row=0, column=0):
         ]
     if style == "rounded":
         return rounded_rectangle_outline(center_x, center_y, pitch * 0.96, pitch * 0.96, pitch * 0.22)
-    if style == "triangle":
-        radius = pitch * 0.49
-        points = [
-            (center_x, center_y + radius),
-            (center_x - radius, center_y + radius * 0.2),
-            (center_x - radius, center_y - radius),
-            (center_x + radius, center_y - radius),
-            (center_x + radius, center_y + radius * 0.2),
-        ]
-        if (row + column) % 2:
-            points = [(2 * center_x - x, 2 * center_y - y) for x, y in points]
-        return [(round(x, 6), round(y, 6)) for x, y in points]
     return rectangle_outline(center_x, center_y, pitch, pitch)
+
+
+def perimeter_frame_outlines(outline, width, height, inset, stroke):
+    """Return overlapping edge strips so previews and solids share one outlined perimeter."""
+    step = max(1, math.ceil(len(outline) / 96))
+    sampled = outline[::step]
+    outer = inset_outline(sampled, width, height, inset)
+    inner = inset_outline(sampled, width, height, inset + stroke)
+    return [
+        [outer[index], outer[(index + 1) % len(outer)], inner[(index + 1) % len(inner)], inner[index]]
+        for index in range(len(outer))
+    ]
 
 
 @dataclass
@@ -473,6 +474,8 @@ class Token:
     module_style: str
     finder_style: str
     finder_center_style: str
+    outer_frame: str
+    outer_frame_width: float
     center_icon: str
     center_span_modules: int
     center_icon_size: float
@@ -509,6 +512,8 @@ class Token:
             details.append(f"frame-{self.finder_style}")
         if self.finder_center_style != "square":
             details.append(f"eye-center-{self.finder_center_style}")
+        if self.outer_frame != "none":
+            details.append("outlined")
         if self.center_icon != "none":
             details.append(f"center-{self.center_icon}")
         if self.construction == "two-piece":
@@ -559,6 +564,8 @@ class Token:
             "module_style": self.module_style,
             "finder_style": self.finder_style,
             "finder_center_style": self.finder_center_style,
+            "outer_frame": self.outer_frame,
+            "outer_frame_width": self.outer_frame_width,
             "center_icon": self.center_icon,
             "center_span_modules": self.center_span_modules,
             "center_icon_size": self.center_icon_size,
@@ -592,18 +599,84 @@ class Token:
             or self.finder_center_style != "square"
             or center_span
         )
+
+        def feature_cell(row, column):
+            return (
+                0 <= row < modules
+                and 0 <= column < modules
+                and self.matrix[row][column]
+                and not is_finder_cell(row, column, modules)
+                and not (center_start <= row < center_end and center_start <= column < center_end)
+            )
+
+        def module_center(row, column):
+            return (
+                (column + 0.5) * self.module - offset + self.qr_offset_x,
+                offset - (row + 0.5) * self.module + self.qr_offset_y,
+            )
+
         if styled:
-            for row, cells in enumerate(self.matrix):
-                for column, dark in enumerate(cells):
-                    if not dark or is_finder_cell(row, column, modules):
-                        continue
-                    if center_start <= row < center_end and center_start <= column < center_end:
-                        continue
-                    center_x = (column + 0.5) * self.module - offset + self.qr_offset_x
-                    center_y = offset - (row + 0.5) * self.module + self.qr_offset_y
-                    outlines.append(
-                        styled_module_outline(self.module_style, center_x, center_y, self.module, row, column)
-                    )
+            if self.module_style == "lines":
+                for row in range(modules):
+                    column = 0
+                    while column < modules:
+                        if not feature_cell(row, column):
+                            column += 1
+                            continue
+                        start = column
+                        while column < modules and feature_cell(row, column):
+                            column += 1
+                        run = column - start
+                        center_x, center_y = module_center(row, start + (run - 1) / 2)
+                        if run == 1:
+                            outlines.append(circle_outline(center_x, center_y, self.module * 0.28, 20))
+                        else:
+                            outlines.append(
+                                rounded_rectangle_outline(
+                                    center_x,
+                                    center_y,
+                                    self.module * (run - 0.08),
+                                    self.module * 0.56,
+                                    self.module * 0.28,
+                                    6,
+                                )
+                            )
+            else:
+                for row in range(modules):
+                    for column in range(modules):
+                        if not feature_cell(row, column):
+                            continue
+                        center_x, center_y = module_center(row, column)
+                        style = "faceted" if self.module_style == "triangle" else self.module_style
+                        pitch = self.module * 0.96 if self.module_style == "triangle" else self.module
+                        outlines.append(styled_module_outline(style, center_x, center_y, pitch, row, column))
+                        if self.module_style != "triangle":
+                            continue
+                        bridge = self.module
+                        if feature_cell(row, column + 1):
+                            middle_x = center_x + bridge / 2
+                            outlines.append(
+                                [
+                                    (middle_x - bridge * 0.16, center_y - bridge * 0.22),
+                                    (middle_x, center_y - bridge * 0.34),
+                                    (middle_x + bridge * 0.16, center_y - bridge * 0.22),
+                                    (middle_x + bridge * 0.16, center_y + bridge * 0.22),
+                                    (middle_x, center_y + bridge * 0.34),
+                                    (middle_x - bridge * 0.16, center_y + bridge * 0.22),
+                                ]
+                            )
+                        if feature_cell(row + 1, column):
+                            middle_y = center_y - bridge / 2
+                            outlines.append(
+                                [
+                                    (center_x - bridge * 0.22, middle_y + bridge * 0.16),
+                                    (center_x - bridge * 0.34, middle_y),
+                                    (center_x - bridge * 0.22, middle_y - bridge * 0.16),
+                                    (center_x + bridge * 0.22, middle_y - bridge * 0.16),
+                                    (center_x + bridge * 0.34, middle_y),
+                                    (center_x + bridge * 0.22, middle_y + bridge * 0.16),
+                                ]
+                            )
             finder_positions = [
                 (self.qr_offset_x - offset, self.qr_offset_y + offset - 7 * self.module),
                 (self.qr_offset_x + offset - 7 * self.module, self.qr_offset_y + offset - 7 * self.module),
@@ -643,6 +716,17 @@ class Token:
                         ]
                     )
         outlines.extend(icon_outlines(self.icon, self.icon_center_x, self.icon_center_y, self.icon_size))
+        if self.outer_frame == "outline":
+            frame_inset = (0 if self.top_profile == "straight" else self.top_size) + 0.2
+            outlines.extend(
+                perimeter_frame_outlines(
+                    self.outline,
+                    self.shape_width,
+                    self.shape_height,
+                    frame_inset,
+                    self.outer_frame_width,
+                )
+            )
         return outlines
 
     def png(self, size=768):
@@ -818,6 +902,9 @@ def create_token(data, nozzle=0.4, filament_count=2):
         finder_style == "circle" and finder_center_style == "square"
     ):
         raise InputError("This finder frame and center combination is not reliably scannable.")
+    outer_frame = data.get("outer_frame", "none")
+    if outer_frame not in QR_OUTER_FRAMES:
+        raise InputError("QR outer frame style is not supported.")
     center_icon = data.get("center_icon", "none")
     if center_icon not in QR_CENTER_ICONS:
         raise InputError("QR center icon is not supported.")
@@ -863,6 +950,9 @@ def create_token(data, nozzle=0.4, filament_count=2):
     if center_icon != "none" and correction != "H":
         correction = "H"
         warnings.append("High error correction is required for a protected center badge.")
+    elif module_style == "lines" and correction != "H":
+        correction = "H"
+        warnings.append("High error correction is required for line modules after slicing.")
     qr = qrcode.QRCode(error_correction=getattr(qrcode.constants, "ERROR_CORRECT_" + correction), border=0)
     qr.add_data(url)
     try:
@@ -871,11 +961,18 @@ def create_token(data, nozzle=0.4, filament_count=2):
         raise InputError("This URL is too long for a QR code.") from error
     matrix = qr.get_matrix()
     # The entire QR plus its four-module quiet zone fits with the requested physical edge padding.
-    style_scale = {"square": 1, "rounded": 0.96, "dots": 0.96, "faceted": 0.96, "triangle": 0.96}[
-        module_style
-    ]
+    style_scale = {
+        "square": 1,
+        "rounded": 0.96,
+        "dots": 0.96,
+        "faceted": 0.96,
+        "triangle": 0.8,
+        "lines": 0.56,
+    }[module_style]
     min_module = max(0.6, nozzle * 2) / style_scale
     perimeter_inset = 0 if top_profile == "straight" else top_size
+    outer_frame_width = max(0.8, nozzle * 2) if outer_frame == "outline" else 0
+    layout_clearance = padding + (outer_frame_width + 0.4 if outer_frame == "outline" else 0)
     qr_offset_x = 0
     qr_offset_y = 0
     if preset == "business-card":
@@ -890,7 +987,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
             min_module,
             corner_style,
             perimeter_inset,
-            padding,
+            layout_clearance,
             corner_radius,
         )
         minimum_diameter = minimum_height = minimum_side
@@ -906,7 +1003,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
             )
     else:
         minimum_diameter = minimum_shape_width(
-            shape, len(matrix), min_module, corner_style, perimeter_inset, padding, corner_radius
+            shape, len(matrix), min_module, corner_style, perimeter_inset, layout_clearance, corner_radius
         )
         minimum_height = outline_dimensions(
             shape_outline(shape, minimum_diameter, minimum_diameter, corner_style, corner_radius)
@@ -925,18 +1022,21 @@ def create_token(data, nozzle=0.4, filament_count=2):
     shape_width, shape_height = outline_dimensions(outline)
     usable_outline = inset_outline(outline, shape_width, shape_height, perimeter_inset)
     if preset == "business-card":
-        margin = padding
+        margin = layout_clearance
         module = (shape_height - 2 * (perimeter_inset + margin)) / (len(matrix) + 8)
         field_half = (len(matrix) + 8) * module / 2
         qr_offset_x = shape_width / 2 - perimeter_inset - margin - field_half
-        module = min(module, module_size_for_outline(usable_outline, len(matrix), qr_offset_x, 0, padding))
+        module = min(
+            module,
+            module_size_for_outline(usable_outline, len(matrix), qr_offset_x, 0, layout_clearance),
+        )
         if module < min_module:
             raise InputError(
                 f"This URL is too dense for the business-card preset with a {nozzle:g} mm nozzle. "
                 "Shorten the URL or use a custom rectangle."
             )
     else:
-        module = module_size_for_outline(usable_outline, len(matrix), clearance=padding)
+        module = module_size_for_outline(usable_outline, len(matrix), clearance=layout_clearance)
     slices = (
         combined_base_slices(edge_profile, edge_size, top_profile, top_size, base)
         if treatment in ("raised", "flat")
@@ -1014,6 +1114,8 @@ def create_token(data, nozzle=0.4, filament_count=2):
         module_style=module_style,
         finder_style=finder_style,
         finder_center_style=finder_center_style,
+        outer_frame=outer_frame,
+        outer_frame_width=outer_frame_width,
         center_icon=center_icon,
         center_span_modules=center_span_modules,
         center_icon_size=center_icon_size,

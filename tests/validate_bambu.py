@@ -179,11 +179,28 @@ def main():
             },
         ),
         (
-            "styled-triangles",
+            "styled-connected",
             {
                 "treatment": "inset",
                 "diameter": 80,
                 "module_style": "triangle",
+            },
+        ),
+        (
+            "styled-lines",
+            {
+                "treatment": "inset",
+                "diameter": 60,
+                "module_style": "lines",
+            },
+        ),
+        (
+            "outlined-lines",
+            {
+                "treatment": "inset",
+                "diameter": 90,
+                "module_style": "lines",
+                "outer_frame": "outline",
             },
         ),
         (

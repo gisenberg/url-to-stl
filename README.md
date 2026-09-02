@@ -3,7 +3,7 @@
 QR Token Studio is a free browser-based generator for raised, inset, flat, or two-piece QR tokens with Bambu Studio AMS assignments.
 Choose a circle, square, independently sized rectangle, pentagon, or hexagon.
 The Business Card starting shape creates an 85.6 × 54 mm card with a right-aligned QR and an optional Font Awesome Instagram, X, Facebook, LinkedIn, YouTube, or TikTok brand mark.
-QR styling includes classic blocks, rounded tiles, dots, faceted tiles, triangles, independently selected finder frames and centers, and protected center badges.
+QR styling includes classic blocks, rounded tiles, merged line runs, connected angular modules, dots, faceted tiles, independently selected finder frames and centers, an optional perimeter outline, and protected center badges.
 Enter a URL, set the dimensions, and download a Bambu project `.3mf`, watertight `.stl`, or QR preview `.png` directly from the web app.
 The entered URL, imported profile, and generated geometry stay in the browser and are never uploaded.
 
@@ -15,7 +15,7 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 2. Choose a starting shape, dimensions, raised, inset, or flat QR treatment, base thickness, and feature depth.
    Rectangles have independent width and height controls.
    Open **Shape and edge details** for exact corner radii, physical border padding, and lower or top edge treatments.
-   Open **QR appearance** to choose a graphical module shape, finder-frame style, finder-center style, and optional center badge.
+   **QR appearance** stays open so its graphical module shape, finder-frame style, finder-center style, optional perimeter outline, and center badge controls remain visible.
    Center badges reserve a bounded light area and lock classic modules, square finder frames and centers, and High error correction because that combination survives native slicing.
    The size slider starts at the shape-specific minimum printable width for the current URL and nozzle.
 3. Download **Bambu 3MF**.
@@ -78,7 +78,9 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 - Bed scale view shows the token at real scale on a gray representation of the selected profile’s print bed.
 - Two-piece inset construction displays and exports the base and cap side by side on that bed.
 - The generated preview uses a high-contrast dark QR and light surface.
-- Print-safe QR patterns include classic blocks, rounded tiles, dots, faceted tiles, and alternating triangular modules.
+- Print-safe QR patterns include classic blocks, rounded tiles, merged horizontal lines, connected angular modules, dots, and faceted tiles.
+- Line modules automatically use High error correction because native sliced toolpaths retain more reliable redundancy at their printable spacing.
+- The optional perimeter outline follows the token shape outside the required four-module QR quiet zone.
 - Finder treatments separate square, rounded, or circular outer frames from square, rounded, circular, or diamond centers.
 - The UI limits the diamond center to the circular frame and prevents the circular-frame/square-center pairing because those alternatives fail independent scan checks.
 - A clear center or social icon badge removes only a bounded central module region, preserves the quiet zone and finder eyes, locks classic modules with square finder frames and centers, and forces High error correction.
@@ -135,7 +137,7 @@ npm run build:web
 .venv\Scripts\python.exe tests\validate_bambu.py --workdir ..\..\work\bambu-validation --report validation\bambu-report.json
 ```
 
-The native integration test checks every supported inset shape and lower-edge treatment, flat and two-piece modes, a rounded top edge, an Instagram business card, and representative styled center-badge combinations for successful slicing, correct filament selection, and decoding of the actual sliced QR toolpaths.
+The native integration test checks every supported inset shape and lower-edge treatment, flat and two-piece modes, a rounded top edge, an Instagram business card, connected and line module treatments, perimeter framing, and representative styled center-badge combinations for successful slicing, correct filament selection, and decoding of the actual sliced QR toolpaths.
 Browser-generated raised, inset, flat, and two-piece 3MF projects have also been passed through the installed Bambu Studio CLI and checked for watertight geometry, correct material assignment, and decodable sliced QR toolpaths.
 No validation command starts a print job.
 

@@ -64,6 +64,7 @@ test('rejects invalid URLs, dimensions, colors, and filament assignments', () =>
     { url: 'https://example.com', edge_profile: 'ogee' },
     { url: 'https://example.com', edge_size: 3 },
     { url: 'https://example.com', module_style: 'hearts' },
+    { url: 'https://example.com', outer_frame: 'flower' },
     { url: 'https://example.com', finder_style: 'flower' },
     { url: 'https://example.com', finder_center_style: 'star' },
     { url: 'https://example.com', finder_style: 'square', finder_center_style: 'diamond' },
@@ -196,7 +197,7 @@ test('business-card preset right-aligns the QR and supports printable social ico
 });
 
 test('print-safe module and finder styles produce printable geometry', () => {
-  for (const module_style of ['square', 'rounded', 'dots', 'faceted', 'triangle']) {
+  for (const module_style of ['square', 'rounded', 'dots', 'faceted', 'triangle', 'lines']) {
     for (const finder_style of ['square', 'rounded', 'circle']) {
       const token = createToken({
         url: 'https://example.com', diameter: 80, treatment: 'inset', module_style, finder_style,
@@ -209,6 +210,33 @@ test('print-safe module and finder styles produce printable geometry', () => {
       assert.ok(mesh.volume > 0);
     }
   }
+});
+
+test('connected modules add neighbor bridges instead of independent triangles', () => {
+  const token = createToken({
+    url: 'https://example.com', diameter: 80, treatment: 'inset', module_style: 'triangle',
+  }, parsed.profile);
+  const eligibleCells = token.matrix.reduce((count, cells, row) => count + cells.reduce(
+    (rowCount, dark, column) => rowCount + Number(dark && !(
+      (row < 7 && column < 7)
+      || (row < 7 && column >= token.modules - 7)
+      || (row >= token.modules - 7 && column < 7)
+    )), 0), 0);
+  assert.ok(token.feature_outlines.length > eligibleCells + 6);
+  assert.ok(buildMesh(manifold, token).volume > 0);
+});
+
+test('outer outline preserves printable QR clearance', () => {
+  const token = createToken({
+    url: 'https://example.com', diameter: 90, treatment: 'inset',
+    module_style: 'lines', outer_frame: 'outline',
+  }, parsed.profile);
+  assert.equal(token.outer_frame, 'outline');
+  assert.ok(token.outer_frame_width >= .8);
+  assert.ok(token.module_size * .56 >= .8 - 1e-6);
+  assert.equal(token.correction, 'H');
+  assert.ok(token.warnings.some(warning => warning.includes('line modules')));
+  assert.ok(buildMesh(manifold, token).volume > 0);
 });
 
 test('independent finder frame and center styles produce printable geometry', () => {
