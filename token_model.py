@@ -313,10 +313,7 @@ def icon_outlines(icon, center_x, center_y, size):
     if icon == "none":
         return []
     return [
-        [
-            (round(center_x + x * size, 6), round(center_y + y * size, 6))
-            for x, y in outline
-        ]
+        [(round(center_x + x * size, 6), round(center_y + y * size, 6)) for x, y in outline]
         for outline in FONT_AWESOME_BRANDS[icon]["outlines"]
     ]
 
@@ -604,9 +601,9 @@ class Token:
                         continue
                     center_x = (column + 0.5) * self.module - offset + self.qr_offset_x
                     center_y = offset - (row + 0.5) * self.module + self.qr_offset_y
-                    outlines.append(styled_module_outline(
-                        self.module_style, center_x, center_y, self.module, row, column
-                    ))
+                    outlines.append(
+                        styled_module_outline(self.module_style, center_x, center_y, self.module, row, column)
+                    )
             finder_positions = [
                 (self.qr_offset_x - offset, self.qr_offset_y + offset - 7 * self.module),
                 (self.qr_offset_x + offset - 7 * self.module, self.qr_offset_y + offset - 7 * self.module),
@@ -874,7 +871,9 @@ def create_token(data, nozzle=0.4, filament_count=2):
         raise InputError("This URL is too long for a QR code.") from error
     matrix = qr.get_matrix()
     # The entire QR plus its four-module quiet zone fits with the requested physical edge padding.
-    style_scale = {"square": 1, "rounded": 0.96, "dots": 0.96, "faceted": 0.96, "triangle": 0.96}[module_style]
+    style_scale = {"square": 1, "rounded": 0.96, "dots": 0.96, "faceted": 0.96, "triangle": 0.96}[
+        module_style
+    ]
     min_module = max(0.6, nozzle * 2) / style_scale
     perimeter_inset = 0 if top_profile == "straight" else top_size
     qr_offset_x = 0
