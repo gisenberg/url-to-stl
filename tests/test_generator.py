@@ -288,8 +288,7 @@ def test_triangle_boundaries_handle_dense_groups_with_internal_holes():
     data_outlines = token.feature_outlines()[:-15]
     areas = [
         sum(
-            x * outline[(index + 1) % len(outline)][1]
-            - outline[(index + 1) % len(outline)][0] * y
+            x * outline[(index + 1) % len(outline)][1] - outline[(index + 1) % len(outline)][0] * y
             for index, (x, y) in enumerate(outline)
         )
         for outline in data_outlines

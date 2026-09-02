@@ -762,7 +762,9 @@ class Token:
                         if not feature_cell(row, column):
                             continue
                         center_x, center_y = module_center(row, column)
-                        outlines.append(styled_module_outline(self.module_style, center_x, center_y, self.module))
+                        outlines.append(
+                            styled_module_outline(self.module_style, center_x, center_y, self.module)
+                        )
             finder_positions = [
                 (self.qr_offset_x - offset, self.qr_offset_y + offset - 7 * self.module),
                 (self.qr_offset_x + offset - 7 * self.module, self.qr_offset_y + offset - 7 * self.module),
@@ -828,8 +830,7 @@ class Token:
         feature_outlines = self.feature_outlines()
         for outline in feature_outlines:
             area = sum(
-                x * outline[(index + 1) % len(outline)][1]
-                - outline[(index + 1) % len(outline)][0] * y
+                x * outline[(index + 1) % len(outline)][1] - outline[(index + 1) % len(outline)][0] * y
                 for index, (x, y) in enumerate(outline)
             )
             if area < 0:
@@ -837,8 +838,7 @@ class Token:
             draw.polygon([(center + x * scale, center - y * scale) for x, y in outline], fill=feature_fill)
         for outline in feature_outlines:
             area = sum(
-                x * outline[(index + 1) % len(outline)][1]
-                - outline[(index + 1) % len(outline)][0] * y
+                x * outline[(index + 1) % len(outline)][1] - outline[(index + 1) % len(outline)][0] * y
                 for index, (x, y) in enumerate(outline)
             )
             if area >= 0:
