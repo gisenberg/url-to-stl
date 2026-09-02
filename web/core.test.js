@@ -225,6 +225,7 @@ test('triangle modules share boundaries and form connected angular groups', () =
   const dataOutlines = token.feature_outlines.slice(0, -15);
   assert.ok(dataOutlines.length < eligibleCells);
   assert.ok(dataOutlines.some(outline => outline.length > 8));
+  assert.ok(dataOutlines.reduce((count, outline) => count + outline.length, 0) > eligibleCells * 4);
   assert.ok(buildMesh(manifold, token).volume > 0);
 
   const denseToken = createToken({

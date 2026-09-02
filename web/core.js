@@ -437,8 +437,9 @@ function connectedTriangleOutlines(cells, modules, pitch, offsetX = 0, offsetY =
         path.push(edge[1]);
       }
       path.pop();
-      const chamfered = [];
-      const cut = pitch * .28;
+      const physical = point => [point[0] * pitch - modules * pitch / 2 + offsetX,
+        point[1] * pitch - modules * pitch / 2 + offsetY];
+      const corners = [];
       for (let index = 0; index < path.length; index++) {
         const point = path[index];
         const previous = path[(index - 1 + path.length) % path.length];
@@ -446,18 +447,42 @@ function connectedTriangleOutlines(cells, modules, pitch, offsetX = 0, offsetY =
         const incoming = [point[0] - previous[0], point[1] - previous[1]];
         const outgoing = [following[0] - point[0], following[1] - point[1]];
         const cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0];
-        const physical = [point[0] * pitch - modules * pitch / 2 + offsetX,
-          point[1] * pitch - modules * pitch / 2 + offsetY];
+        const position = physical(point);
         if (cross > 0) {
-          chamfered.push([round(physical[0] - incoming[0] * cut),
-            round(physical[1] - incoming[1] * cut)]);
-          chamfered.push([round(physical[0] + outgoing[0] * cut),
-            round(physical[1] + outgoing[1] * cut)]);
-        } else if (cross < 0) {
-          chamfered.push(physical.map(value => round(value)));
+          const variant = Math.abs(point[0] * 37 + point[1] * 19) % 3;
+          const incomingCut = pitch * [.18, .26, .34][variant];
+          const outgoingCut = pitch * [.34, .18, .26][variant];
+          corners.push([
+            [position[0] - incoming[0] * incomingCut, position[1] - incoming[1] * incomingCut],
+            [position[0] + outgoing[0] * outgoingCut, position[1] + outgoing[1] * outgoingCut],
+          ]);
+        } else {
+          corners.push([position, position]);
         }
       }
-      outlines.push(chamfered);
+      const jagged = [];
+      const append = point => {
+        const rounded = point.map(value => round(value));
+        const previous = jagged.at(-1);
+        if (!previous || previous[0] !== rounded[0] || previous[1] !== rounded[1]) jagged.push(rounded);
+      };
+      for (let index = 0; index < path.length; index++) {
+        const point = path[index];
+        const following = path[(index + 1) % path.length];
+        const direction = [following[0] - point[0], following[1] - point[1]];
+        append(corners[index][1]);
+        const signature = Math.abs(point[0] * 29 + point[1] * 43
+          + direction[0] * 11 + direction[1] * 17);
+        const fraction = [.42, .5, .58][signature % 3];
+        const depth = pitch * [.16, .2, .24][Math.floor(signature / 3) % 3];
+        append([(point[0] + direction[0] * fraction) * pitch - modules * pitch / 2 + offsetX
+          - direction[1] * depth,
+        (point[1] + direction[1] * fraction) * pitch - modules * pitch / 2 + offsetY
+          + direction[0] * depth]);
+        append(corners[(index + 1) % path.length][0]);
+      }
+      if (jagged.length > 1 && pointKey(jagged[0]) === pointKey(jagged.at(-1))) jagged.pop();
+      outlines.push(jagged);
     }
   }
   return outlines;

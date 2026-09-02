@@ -451,7 +451,7 @@ def connected_cell_groups(cells):
 
 
 def connected_triangle_outlines(cells, modules, pitch, offset_x=0, offset_y=0):
-    """Trace each adjacent QR group as merged paths with triangular outer corners."""
+    """Trace merged QR groups with deterministic triangular cuts along exposed edges."""
     outlines = []
     turn_priority = {1: 3, 0: 2, 3: 1, 2: 0}
     for group in connected_cell_groups(cells):
@@ -493,34 +493,65 @@ def connected_triangle_outlines(cells, modules, pitch, offset_x=0, offset_y=0):
                 path.append(edge[1])
 
             path.pop()
-            chamfered = []
-            cut = pitch * 0.28
+            jagged = []
+
+            def physical(point):
+                return (
+                    point[0] * pitch - modules * pitch / 2 + offset_x,
+                    point[1] * pitch - modules * pitch / 2 + offset_y,
+                )
+
+            def append(point):
+                rounded = (round(point[0], 6), round(point[1], 6))
+                if not jagged or rounded != jagged[-1]:
+                    jagged.append(rounded)
+
+            corners = []
             for index, point in enumerate(path):
                 previous = path[index - 1]
                 following = path[(index + 1) % len(path)]
                 incoming = (point[0] - previous[0], point[1] - previous[1])
                 outgoing = (following[0] - point[0], following[1] - point[1])
                 cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0]
-                physical = (
-                    point[0] * pitch - modules * pitch / 2 + offset_x,
-                    point[1] * pitch - modules * pitch / 2 + offset_y,
-                )
+                position = physical(point)
                 if cross > 0:
-                    chamfered.append(
-                        (
-                            round(physical[0] - incoming[0] * cut, 6),
-                            round(physical[1] - incoming[1] * cut, 6),
-                        )
+                    variant = abs(point[0] * 37 + point[1] * 19) % 3
+                    incoming_cut = pitch * (0.18, 0.26, 0.34)[variant]
+                    outgoing_cut = pitch * (0.34, 0.18, 0.26)[variant]
+                    before = (
+                        position[0] - incoming[0] * incoming_cut,
+                        position[1] - incoming[1] * incoming_cut,
                     )
-                    chamfered.append(
-                        (
-                            round(physical[0] + outgoing[0] * cut, 6),
-                            round(physical[1] + outgoing[1] * cut, 6),
-                        )
+                    after = (
+                        position[0] + outgoing[0] * outgoing_cut,
+                        position[1] + outgoing[1] * outgoing_cut,
                     )
-                elif cross < 0:
-                    chamfered.append((round(physical[0], 6), round(physical[1], 6)))
-            outlines.append(chamfered)
+                else:
+                    before = after = position
+                corners.append((before, after))
+
+            for index, point in enumerate(path):
+                following = path[(index + 1) % len(path)]
+                direction = (following[0] - point[0], following[1] - point[1])
+                append(corners[index][1])
+                signature = abs(point[0] * 29 + point[1] * 43 + direction[0] * 11 + direction[1] * 17)
+                fraction = (0.42, 0.5, 0.58)[signature % 3]
+                depth = pitch * (0.16, 0.2, 0.24)[(signature // 3) % 3]
+                midpoint = (
+                    (point[0] + direction[0] * fraction) * pitch
+                    - modules * pitch / 2
+                    + offset_x
+                    - direction[1] * depth,
+                    (point[1] + direction[1] * fraction) * pitch
+                    - modules * pitch / 2
+                    + offset_y
+                    + direction[0] * depth,
+                )
+                append(midpoint)
+                append(corners[(index + 1) % len(path)][0])
+            if jagged[0] == jagged[-1]:
+                jagged.pop()
+            outlines.append(jagged)
     return outlines
 
 

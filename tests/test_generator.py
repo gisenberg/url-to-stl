@@ -270,6 +270,7 @@ def test_triangle_modules_union_into_one_solid_per_adjacent_group_and_scan():
     assert any(len(group) > 4 for group in groups)
     assert len(data_outlines) < len(eligible)
     assert any(len(outline) > 8 for outline in data_outlines)
+    assert sum(len(outline) for outline in data_outlines) > len(eligible) * 4
     preview_scan = zxingcpp.read_barcode(Image.open(io.BytesIO(token.png())))
     assert preview_scan is not None
     assert preview_scan.text == token.url
