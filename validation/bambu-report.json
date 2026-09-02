@@ -179,7 +179,7 @@
       "correct_filament_on_every_model_layer": true
     },
     {
-      "case": "styled-connected",
+      "case": "styled-triangles",
       "bambu_result": "Success",
       "filament_changes": 1,
       "warning_message": "",

@@ -179,7 +179,7 @@ def main():
             },
         ),
         (
-            "styled-connected",
+            "styled-triangles",
             {
                 "treatment": "inset",
                 "diameter": 80,

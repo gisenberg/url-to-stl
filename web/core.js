@@ -343,7 +343,7 @@ function finderOutlines(style, centerStyle, left, bottom, pitch) {
   return outlines;
 }
 
-function styledModuleOutline(style, centerX, centerY, pitch, row = 0, column = 0) {
+function styledModuleOutline(style, centerX, centerY, pitch) {
   if (style === 'dots') return circleOutline(centerX, centerY, pitch * .48, 24);
   if (style === 'faceted') {
     const radius = pitch * .49;
@@ -358,6 +358,109 @@ function styledModuleOutline(style, centerX, centerY, pitch, row = 0, column = 0
     return roundedRectangleOutline(centerX, centerY, pitch * .96, pitch * .96, pitch * .22, 4);
   }
   return rectangleOutline(centerX, centerY, pitch, pitch);
+}
+
+function connectedCellGroups(cells) {
+  const unseen = new Set(cells);
+  const groups = [];
+  while (unseen.size) {
+    const first = [...unseen].sort()[0];
+    unseen.delete(first);
+    const group = new Set([first]);
+    const pending = [first];
+    while (pending.length) {
+      const current = pending.pop();
+      const [row, column] = current.split(',').map(Number);
+      for (const neighbor of [[row - 1, column], [row, column + 1], [row + 1, column], [row, column - 1]]) {
+        const key = neighbor.join(',');
+        if (!unseen.has(key)) continue;
+        unseen.delete(key);
+        group.add(key);
+        pending.push(key);
+      }
+    }
+    groups.push(group);
+  }
+  return groups;
+}
+
+function connectedTriangleOutlines(cells, modules, pitch, offsetX = 0, offsetY = 0) {
+  const outlines = [];
+  const turnPriority = [2, 3, 0, 1];
+  const directionIndex = new Map([['1,0', 0], ['0,1', 1], ['-1,0', 2], ['0,-1', 3]]);
+  const pointKey = point => point.join(',');
+  const edgeKey = edge => `${pointKey(edge[0])}:${pointKey(edge[1])}`;
+  for (const group of connectedCellGroups(cells)) {
+    const edges = new Map();
+    const outgoing = new Map();
+    const addEdge = (start, end) => {
+      const edge = [start, end];
+      edges.set(edgeKey(edge), edge);
+      const key = pointKey(start);
+      if (!outgoing.has(key)) outgoing.set(key, []);
+      outgoing.get(key).push(edge);
+    };
+    for (const cell of group) {
+      const [row, column] = cell.split(',').map(Number);
+      const left = column;
+      const right = column + 1;
+      const top = modules - row;
+      const bottom = modules - row - 1;
+      if (!group.has(`${row + 1},${column}`)) addEdge([left, bottom], [right, bottom]);
+      if (!group.has(`${row},${column + 1}`)) addEdge([right, bottom], [right, top]);
+      if (!group.has(`${row - 1},${column}`)) addEdge([right, top], [left, top]);
+      if (!group.has(`${row},${column - 1}`)) addEdge([left, top], [left, bottom]);
+    }
+
+    while (edges.size) {
+      const firstKey = [...edges.keys()].sort()[0];
+      const firstEdge = edges.get(firstKey);
+      edges.delete(firstKey);
+      const path = [firstEdge[0], firstEdge[1]];
+      while (pointKey(path.at(-1)) !== pointKey(path[0])) {
+        const previous = path.at(-2);
+        const current = path.at(-1);
+        const candidates = (outgoing.get(pointKey(current)) || [])
+          .filter(edge => edges.has(edgeKey(edge)));
+        if (!candidates.length) throw new Error('Connected QR boundary did not close.');
+        const incoming = [current[0] - previous[0], current[1] - previous[1]];
+        const incomingIndex = directionIndex.get(pointKey(incoming));
+        candidates.sort((left, right) => {
+          const priority = edge => {
+            const outgoing = [edge[1][0] - current[0], edge[1][1] - current[1]];
+            return turnPriority[(directionIndex.get(pointKey(outgoing)) - incomingIndex + 4) % 4];
+          };
+          return priority(right) - priority(left);
+        });
+        const edge = candidates[0];
+        edges.delete(edgeKey(edge));
+        path.push(edge[1]);
+      }
+      path.pop();
+      const chamfered = [];
+      const cut = pitch * .28;
+      for (let index = 0; index < path.length; index++) {
+        const point = path[index];
+        const previous = path[(index - 1 + path.length) % path.length];
+        const following = path[(index + 1) % path.length];
+        const incoming = [point[0] - previous[0], point[1] - previous[1]];
+        const outgoing = [following[0] - point[0], following[1] - point[1]];
+        const cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0];
+        const physical = [point[0] * pitch - modules * pitch / 2 + offsetX,
+          point[1] * pitch - modules * pitch / 2 + offsetY];
+        if (cross > 0) {
+          chamfered.push([round(physical[0] - incoming[0] * cut),
+            round(physical[1] - incoming[1] * cut)]);
+          chamfered.push([round(physical[0] + outgoing[0] * cut),
+            round(physical[1] + outgoing[1] * cut)]);
+        } else if (cross < 0) {
+          chamfered.push(physical.map(value => round(value)));
+        }
+      }
+      outlines.push(chamfered);
+    }
+  }
+  return outlines;
 }
 
 function perimeterFrameOutlines(outline, width, height, inset, stroke) {
@@ -388,7 +491,16 @@ function featureOutlines(token) {
     offset - (row + .5) * token.module_size + token.qr_offset_y,
   ];
   if (styled) {
-    if (token.module_style === 'lines') {
+    if (token.module_style === 'triangle') {
+      const cells = [];
+      for (let row = 0; row < token.modules; row++) {
+        for (let column = 0; column < token.modules; column++) {
+          if (featureCell(row, column)) cells.push(`${row},${column}`);
+        }
+      }
+      outlines.push(...connectedTriangleOutlines(
+        cells, token.modules, token.module_size, token.qr_offset_x, token.qr_offset_y));
+    } else if (token.module_style === 'lines') {
       for (let row = 0; row < token.modules; row++) {
         let column = 0;
         while (column < token.modules) {
@@ -411,23 +523,7 @@ function featureOutlines(token) {
         for (let column = 0; column < token.modules; column++) {
           if (!featureCell(row, column)) continue;
           const [centerX, centerY] = moduleCenter(row, column);
-          const style = token.module_style === 'triangle' ? 'faceted' : token.module_style;
-          const pitch = token.module_style === 'triangle' ? token.module_size * .96 : token.module_size;
-          outlines.push(styledModuleOutline(style, centerX, centerY, pitch, row, column));
-          if (token.module_style !== 'triangle') continue;
-          const bridge = token.module_size;
-          if (featureCell(row, column + 1)) {
-            const middleX = centerX + bridge / 2;
-            outlines.push([[middleX - bridge*.16, centerY - bridge*.22], [middleX, centerY - bridge*.34],
-              [middleX + bridge*.16, centerY - bridge*.22], [middleX + bridge*.16, centerY + bridge*.22],
-              [middleX, centerY + bridge*.34], [middleX - bridge*.16, centerY + bridge*.22]]);
-          }
-          if (featureCell(row + 1, column)) {
-            const middleY = centerY - bridge / 2;
-            outlines.push([[centerX - bridge*.22, middleY + bridge*.16], [centerX - bridge*.34, middleY],
-              [centerX - bridge*.22, middleY - bridge*.16], [centerX + bridge*.22, middleY - bridge*.16],
-              [centerX + bridge*.34, middleY], [centerX + bridge*.22, middleY + bridge*.16]]);
-          }
+          outlines.push(styledModuleOutline(token.module_style, centerX, centerY, token.module_size));
         }
       }
     }

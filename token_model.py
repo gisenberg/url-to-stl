@@ -404,7 +404,7 @@ def finder_outlines(style, center_style, left, bottom, pitch):
     return outlines
 
 
-def styled_module_outline(style, center_x, center_y, pitch, row=0, column=0):
+def styled_module_outline(style, center_x, center_y, pitch):
     if style == "dots":
         return circle_outline(center_x, center_y, pitch * 0.48, 24)
     if style == "faceted":
@@ -423,6 +423,105 @@ def styled_module_outline(style, center_x, center_y, pitch, row=0, column=0):
     if style == "rounded":
         return rounded_rectangle_outline(center_x, center_y, pitch * 0.96, pitch * 0.96, pitch * 0.22)
     return rectangle_outline(center_x, center_y, pitch, pitch)
+
+
+def connected_cell_groups(cells):
+    """Return orthogonally connected cell groups in deterministic order."""
+    unseen = set(cells)
+    groups = []
+    while unseen:
+        first = min(unseen)
+        unseen.remove(first)
+        group = {first}
+        pending = [first]
+        while pending:
+            row, column = pending.pop()
+            for neighbor in (
+                (row - 1, column),
+                (row, column + 1),
+                (row + 1, column),
+                (row, column - 1),
+            ):
+                if neighbor in unseen:
+                    unseen.remove(neighbor)
+                    group.add(neighbor)
+                    pending.append(neighbor)
+        groups.append(group)
+    return groups
+
+
+def connected_triangle_outlines(cells, modules, pitch, offset_x=0, offset_y=0):
+    """Trace each adjacent QR group as merged paths with triangular outer corners."""
+    outlines = []
+    turn_priority = {1: 3, 0: 2, 3: 1, 2: 0}
+    for group in connected_cell_groups(cells):
+        edges = set()
+        for row, column in group:
+            left, right = column, column + 1
+            top, bottom = modules - row, modules - row - 1
+            if (row + 1, column) not in group:
+                edges.add(((left, bottom), (right, bottom)))
+            if (row, column + 1) not in group:
+                edges.add(((right, bottom), (right, top)))
+            if (row - 1, column) not in group:
+                edges.add(((right, top), (left, top)))
+            if (row, column - 1) not in group:
+                edges.add(((left, top), (left, bottom)))
+
+        edges_by_start = {}
+        for edge in edges:
+            edges_by_start.setdefault(edge[0], []).append(edge)
+        while edges:
+            start, end = min(edges)
+            edges.remove((start, end))
+            path = [start, end]
+            while path[-1] != path[0]:
+                previous, current = path[-2], path[-1]
+                candidates = [edge for edge in edges_by_start.get(current, ()) if edge in edges]
+                if not candidates:
+                    raise RuntimeError("Connected QR boundary did not close.")
+                incoming = (current[0] - previous[0], current[1] - previous[1])
+                incoming_index = {(1, 0): 0, (0, 1): 1, (-1, 0): 2, (0, -1): 3}[incoming]
+
+                def edge_priority(edge):
+                    outgoing = (edge[1][0] - current[0], edge[1][1] - current[1])
+                    outgoing_index = {(1, 0): 0, (0, 1): 1, (-1, 0): 2, (0, -1): 3}[outgoing]
+                    return turn_priority[(outgoing_index - incoming_index) % 4]
+
+                edge = max(candidates, key=edge_priority)
+                edges.remove(edge)
+                path.append(edge[1])
+
+            path.pop()
+            chamfered = []
+            cut = pitch * 0.28
+            for index, point in enumerate(path):
+                previous = path[index - 1]
+                following = path[(index + 1) % len(path)]
+                incoming = (point[0] - previous[0], point[1] - previous[1])
+                outgoing = (following[0] - point[0], following[1] - point[1])
+                cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0]
+                physical = (
+                    point[0] * pitch - modules * pitch / 2 + offset_x,
+                    point[1] * pitch - modules * pitch / 2 + offset_y,
+                )
+                if cross > 0:
+                    chamfered.append(
+                        (
+                            round(physical[0] - incoming[0] * cut, 6),
+                            round(physical[1] - incoming[1] * cut, 6),
+                        )
+                    )
+                    chamfered.append(
+                        (
+                            round(physical[0] + outgoing[0] * cut, 6),
+                            round(physical[1] + outgoing[1] * cut, 6),
+                        )
+                    )
+                elif cross < 0:
+                    chamfered.append((round(physical[0], 6), round(physical[1], 6)))
+            outlines.append(chamfered)
+    return outlines
 
 
 def perimeter_frame_outlines(outline, width, height, inset, stroke):
@@ -616,7 +715,23 @@ class Token:
             )
 
         if styled:
-            if self.module_style == "lines":
+            if self.module_style == "triangle":
+                cells = {
+                    (row, column)
+                    for row in range(modules)
+                    for column in range(modules)
+                    if feature_cell(row, column)
+                }
+                outlines.extend(
+                    connected_triangle_outlines(
+                        cells,
+                        modules,
+                        self.module,
+                        self.qr_offset_x,
+                        self.qr_offset_y,
+                    )
+                )
+            elif self.module_style == "lines":
                 for row in range(modules):
                     column = 0
                     while column < modules:
@@ -647,36 +762,7 @@ class Token:
                         if not feature_cell(row, column):
                             continue
                         center_x, center_y = module_center(row, column)
-                        style = "faceted" if self.module_style == "triangle" else self.module_style
-                        pitch = self.module * 0.96 if self.module_style == "triangle" else self.module
-                        outlines.append(styled_module_outline(style, center_x, center_y, pitch, row, column))
-                        if self.module_style != "triangle":
-                            continue
-                        bridge = self.module
-                        if feature_cell(row, column + 1):
-                            middle_x = center_x + bridge / 2
-                            outlines.append(
-                                [
-                                    (middle_x - bridge * 0.16, center_y - bridge * 0.22),
-                                    (middle_x, center_y - bridge * 0.34),
-                                    (middle_x + bridge * 0.16, center_y - bridge * 0.22),
-                                    (middle_x + bridge * 0.16, center_y + bridge * 0.22),
-                                    (middle_x, center_y + bridge * 0.34),
-                                    (middle_x - bridge * 0.16, center_y + bridge * 0.22),
-                                ]
-                            )
-                        if feature_cell(row + 1, column):
-                            middle_y = center_y - bridge / 2
-                            outlines.append(
-                                [
-                                    (center_x - bridge * 0.22, middle_y + bridge * 0.16),
-                                    (center_x - bridge * 0.34, middle_y),
-                                    (center_x - bridge * 0.22, middle_y - bridge * 0.16),
-                                    (center_x + bridge * 0.22, middle_y - bridge * 0.16),
-                                    (center_x + bridge * 0.34, middle_y),
-                                    (center_x + bridge * 0.22, middle_y + bridge * 0.16),
-                                ]
-                            )
+                        outlines.append(styled_module_outline(self.module_style, center_x, center_y, self.module))
             finder_positions = [
                 (self.qr_offset_x - offset, self.qr_offset_y + offset - 7 * self.module),
                 (self.qr_offset_x + offset - 7 * self.module, self.qr_offset_y + offset - 7 * self.module),
@@ -739,8 +825,25 @@ class Token:
         fill = self.qr_color if inset else self.base_color
         draw.polygon([(center + x * scale, center - y * scale) for x, y in self.outline], fill=fill)
         feature_fill = self.base_color if inset else self.qr_color
-        for outline in self.feature_outlines():
+        feature_outlines = self.feature_outlines()
+        for outline in feature_outlines:
+            area = sum(
+                x * outline[(index + 1) % len(outline)][1]
+                - outline[(index + 1) % len(outline)][0] * y
+                for index, (x, y) in enumerate(outline)
+            )
+            if area < 0:
+                continue
             draw.polygon([(center + x * scale, center - y * scale) for x, y in outline], fill=feature_fill)
+        for outline in feature_outlines:
+            area = sum(
+                x * outline[(index + 1) % len(outline)][1]
+                - outline[(index + 1) % len(outline)][0] * y
+                for index, (x, y) in enumerate(outline)
+            )
+            if area >= 0:
+                continue
+            draw.polygon([(center + x * scale, center - y * scale) for x, y in outline], fill=fill)
         output = io.BytesIO()
         img.save(output, format="PNG")
         return output.getvalue()

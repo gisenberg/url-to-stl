@@ -4,6 +4,7 @@ import math
 import xml.etree.ElementTree as ET
 import zipfile
 
+import manifold3d as manifold
 import numpy as np
 import pytest
 import trimesh
@@ -213,7 +214,7 @@ def test_print_safe_qr_styles_are_watertight_and_scannable(module_style, finder_
     test_printed_top_geometry_decodes_exact_url(token, mesh)
 
 
-def test_connected_modules_add_neighbor_bridges_and_scan():
+def test_triangle_modules_union_into_one_solid_per_adjacent_group_and_scan():
     token = create_token(
         {
             "url": "https://example.com",
@@ -222,13 +223,82 @@ def test_connected_modules_add_neighbor_bridges_and_scan():
             "module_style": "triangle",
         }
     )
-    eligible_cells = sum(
-        token.matrix[row][column] and not is_finder_cell(row, column, len(token.matrix))
-        for row in range(len(token.matrix))
-        for column in range(len(token.matrix))
+    modules = len(token.matrix)
+    eligible = {
+        (row, column)
+        for row in range(modules)
+        for column in range(modules)
+        if token.matrix[row][column] and not is_finder_cell(row, column, modules)
+    }
+    groups = []
+    unseen = set(eligible)
+    while unseen:
+        pending = [unseen.pop()]
+        group = set(pending)
+        while pending:
+            row, column = pending.pop()
+            for neighbor in ((row - 1, column), (row + 1, column), (row, column - 1), (row, column + 1)):
+                if neighbor in unseen:
+                    unseen.remove(neighbor)
+                    group.add(neighbor)
+                    pending.append(neighbor)
+        groups.append(group)
+
+    data_outlines = token.feature_outlines()[:-15]
+    raw = manifold.CrossSection(data_outlines, manifold.FillRule.NonZero).extrude(0.2).to_mesh64()
+    data_mesh = trimesh.Trimesh(
+        vertices=np.asarray(raw.vert_properties)[:, :3],
+        faces=np.asarray(raw.tri_verts),
+        process=False,
     )
-    assert len(token.feature_outlines()) > eligible_cells + 6
+    neighbors = [[] for _ in data_mesh.faces]
+    for first, second in data_mesh.face_adjacency:
+        neighbors[first].append(second)
+        neighbors[second].append(first)
+    mesh_groups = 0
+    unseen_faces = set(range(len(data_mesh.faces)))
+    while unseen_faces:
+        mesh_groups += 1
+        pending_faces = [unseen_faces.pop()]
+        while pending_faces:
+            face = pending_faces.pop()
+            for neighbor in neighbors[face]:
+                if neighbor in unseen_faces:
+                    unseen_faces.remove(neighbor)
+                    pending_faces.append(neighbor)
+    assert mesh_groups == len(groups)
+    assert any(len(group) > 4 for group in groups)
+    assert len(data_outlines) < len(eligible)
+    assert any(len(outline) > 8 for outline in data_outlines)
+    preview_scan = zxingcpp.read_barcode(Image.open(io.BytesIO(token.png())))
+    assert preview_scan is not None
+    assert preview_scan.text == token.url
     test_printed_top_geometry_decodes_exact_url(token, token.mesh())
+
+
+def test_triangle_boundaries_handle_dense_groups_with_internal_holes():
+    token = create_token(
+        {
+            "url": f"https://example.com/{'a' * 900}",
+            "diameter": 196,
+            "treatment": "inset",
+            "module_style": "triangle",
+        }
+    )
+    data_outlines = token.feature_outlines()[:-15]
+    areas = [
+        sum(
+            x * outline[(index + 1) % len(outline)][1]
+            - outline[(index + 1) % len(outline)][0] * y
+            for index, (x, y) in enumerate(outline)
+        )
+        for outline in data_outlines
+    ]
+    assert len(token.matrix) > 100
+    assert any(area < 0 for area in areas)
+    preview_scan = zxingcpp.read_barcode(Image.open(io.BytesIO(token.png())))
+    assert preview_scan is not None
+    assert preview_scan.text == token.url
 
 
 def test_outer_outline_preserves_quiet_zone_and_scans():

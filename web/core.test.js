@@ -212,7 +212,7 @@ test('print-safe module and finder styles produce printable geometry', () => {
   }
 });
 
-test('connected modules add neighbor bridges instead of independent triangles', () => {
+test('triangle modules share boundaries and form connected angular groups', () => {
   const token = createToken({
     url: 'https://example.com', diameter: 80, treatment: 'inset', module_style: 'triangle',
   }, parsed.profile);
@@ -222,8 +222,24 @@ test('connected modules add neighbor bridges instead of independent triangles', 
       || (row < 7 && column >= token.modules - 7)
       || (row >= token.modules - 7 && column < 7)
     )), 0), 0);
-  assert.ok(token.feature_outlines.length > eligibleCells + 6);
+  const dataOutlines = token.feature_outlines.slice(0, -15);
+  assert.ok(dataOutlines.length < eligibleCells);
+  assert.ok(dataOutlines.some(outline => outline.length > 8));
   assert.ok(buildMesh(manifold, token).volume > 0);
+
+  const denseToken = createToken({
+    url: `https://example.com/${'a'.repeat(900)}`,
+    diameter: 196,
+    treatment: 'inset',
+    module_style: 'triangle',
+  }, parsed.profile);
+  const denseOutlines = denseToken.feature_outlines.slice(0, -15);
+  const signedArea = outline => outline.reduce((area, [x, y], index) => {
+    const following = outline[(index + 1) % outline.length];
+    return area + x * following[1] - following[0] * y;
+  }, 0);
+  assert.ok(denseToken.modules > 100);
+  assert.ok(denseOutlines.some(outline => signedArea(outline) < 0));
 });
 
 test('outer outline preserves printable QR clearance', () => {

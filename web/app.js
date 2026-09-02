@@ -381,15 +381,16 @@ function drawScan() {
     }));
   }
   const outlines = classic ? token.icon_outlines : token.feature_outlines;
+  ctx.beginPath();
   for (const outline of outlines) {
-    ctx.beginPath();
     outline.forEach(([x, y], index) => {
       const px = 450 + x * scale;
       const py = 450 - y * scale;
       if (index === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     });
-    ctx.closePath(); ctx.fill();
+    ctx.closePath();
   }
+  ctx.fill('nonzero');
 }
 function setupScene() {
   try {
