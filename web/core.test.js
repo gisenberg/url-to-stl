@@ -196,7 +196,7 @@ test('business-card preset right-aligns the QR and supports printable social ico
 });
 
 test('print-safe module and finder styles produce printable geometry', () => {
-  for (const module_style of ['square', 'rounded', 'dots', 'faceted']) {
+  for (const module_style of ['square', 'rounded', 'dots', 'faceted', 'triangle']) {
     for (const finder_style of ['square', 'rounded', 'circle']) {
       const token = createToken({
         url: 'https://example.com', diameter: 80, treatment: 'inset', module_style, finder_style,

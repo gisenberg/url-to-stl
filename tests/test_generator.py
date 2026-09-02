@@ -192,7 +192,7 @@ def test_business_card_preset_right_aligns_qr_and_prints_social_icons(icon):
     test_printed_top_geometry_decodes_exact_url(token, mesh)
 
 
-@pytest.mark.parametrize("module_style", ["square", "rounded", "dots", "faceted"])
+@pytest.mark.parametrize("module_style", ["square", "rounded", "dots", "faceted", "triangle"])
 @pytest.mark.parametrize("finder_style", ["square", "rounded", "circle"])
 def test_print_safe_qr_styles_are_watertight_and_scannable(module_style, finder_style):
     token = create_token(

@@ -1,10 +1,12 @@
 """QR encoding, physical constraints, and a single watertight printable solid."""
 
 import io
+import json
 import math
 import re
 from dataclasses import dataclass
 from hashlib import sha256
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import manifold3d as manifold
@@ -63,10 +65,13 @@ CORNER_STYLES = {"default", "sharp", "softened", "rounded", "custom"}
 EDGE_PROFILES = {"straight", "chamfered", "rounded", "inset", "tapered"}
 TOKEN_PRESETS = {"custom", "business-card"}
 TOKEN_ICONS = {"none", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"}
-QR_MODULE_STYLES = {"square", "rounded", "dots", "faceted"}
+QR_MODULE_STYLES = {"square", "rounded", "dots", "faceted", "triangle"}
 QR_FINDER_STYLES = {"square", "rounded", "circle"}
 QR_FINDER_CENTER_STYLES = {"square", "rounded", "circle", "diamond"}
 QR_CENTER_ICONS = {"none", "blank", "instagram", "x", "facebook", "linkedin", "youtube", "tiktok"}
+FONT_AWESOME_BRANDS = json.loads(
+    (Path(__file__).resolve().parent / "assets" / "fontawesome-brands.json").read_text(encoding="utf-8")
+)["icons"]
 
 
 def regular_polygon(sides, width, start_angle):
@@ -304,88 +309,16 @@ def circle_outline(cx, cy, radius, segments=32):
     ]
 
 
-def rotated_rectangle(cx, cy, length, width, angle):
-    cosine, sine = math.cos(angle), math.sin(angle)
-    return [
-        (round(cx + x * cosine - y * sine, 6), round(cy + x * sine + y * cosine, 6))
-        for x, y in rectangle_outline(0, 0, length, width)
-    ]
-
-
 def icon_outlines(icon, center_x, center_y, size):
     if icon == "none":
         return []
-    outlines = []
-
-    def add_rect(x, y, width, height):
-        outlines.append(
-            rectangle_outline(center_x + x * size, center_y + y * size, width * size, height * size)
-        )
-
-    def add_circle(x, y, radius):
-        outlines.append(circle_outline(center_x + x * size, center_y + y * size, radius * size))
-
-    if icon == "instagram":
-        stroke = 0.1
-        add_rect(0, 0.4, 0.8, stroke)
-        add_rect(0, -0.4, 0.8, stroke)
-        add_rect(-0.4, 0, stroke, 0.8)
-        add_rect(0.4, 0, stroke, 0.8)
-        for step in range(16):
-            a, b = math.tau * step / 16, math.tau * (step + 1) / 16
-            outlines.append(
-                [
-                    (
-                        round(center_x + 0.24 * math.cos(a) * size, 6),
-                        round(center_y + 0.24 * math.sin(a) * size, 6),
-                    ),
-                    (
-                        round(center_x + 0.24 * math.cos(b) * size, 6),
-                        round(center_y + 0.24 * math.sin(b) * size, 6),
-                    ),
-                    (
-                        round(center_x + 0.14 * math.cos(b) * size, 6),
-                        round(center_y + 0.14 * math.sin(b) * size, 6),
-                    ),
-                    (
-                        round(center_x + 0.14 * math.cos(a) * size, 6),
-                        round(center_y + 0.14 * math.sin(a) * size, 6),
-                    ),
-                ]
-            )
-        add_circle(0.25, 0.25, 0.055)
-    elif icon == "x":
-        outlines.append(rotated_rectangle(center_x, center_y, size * 0.92, size * 0.12, math.pi * 0.29))
-        outlines.append(rotated_rectangle(center_x, center_y, size * 0.92, size * 0.12, -math.pi * 0.29))
-    elif icon == "facebook":
-        add_rect(-0.06, -0.03, 0.16, 0.82)
-        add_rect(0.12, 0.35, 0.48, 0.16)
-        add_rect(0.1, 0.06, 0.42, 0.15)
-    elif icon == "linkedin":
-        add_circle(-0.34, 0.34, 0.09)
-        add_rect(-0.34, -0.14, 0.16, 0.62)
-        add_rect(-0.02, -0.14, 0.16, 0.62)
-        add_rect(0.3, -0.14, 0.16, 0.62)
-        add_rect(0.14, 0.15, 0.48, 0.15)
-    elif icon == "youtube":
-        stroke = 0.09
-        add_rect(0, 0.34, 0.86, stroke)
-        add_rect(0, -0.34, 0.86, stroke)
-        add_rect(-0.43, 0, stroke, 0.68)
-        add_rect(0.43, 0, stroke, 0.68)
-        outlines.append(
-            [
-                (round(center_x - 0.12 * size, 6), round(center_y - 0.2 * size, 6)),
-                (round(center_x - 0.12 * size, 6), round(center_y + 0.2 * size, 6)),
-                (round(center_x + 0.24 * size, 6), round(center_y, 6)),
-            ]
-        )
-    elif icon == "tiktok":
-        add_rect(0.08, 0.06, 0.14, 0.68)
-        add_rect(0.22, 0.35, 0.42, 0.14)
-        add_circle(-0.12, -0.3, 0.2)
-        add_circle(0.38, 0.25, 0.11)
-    return outlines
+    return [
+        [
+            (round(center_x + x * size, 6), round(center_y + y * size, 6))
+            for x, y in outline
+        ]
+        for outline in FONT_AWESOME_BRANDS[icon]["outlines"]
+    ]
 
 
 def rounded_rectangle_outline(cx, cy, width, height, radius, segments=4):
@@ -473,7 +406,7 @@ def finder_outlines(style, center_style, left, bottom, pitch):
     return outlines
 
 
-def styled_module_outline(style, center_x, center_y, pitch):
+def styled_module_outline(style, center_x, center_y, pitch, row=0, column=0):
     if style == "dots":
         return circle_outline(center_x, center_y, pitch * 0.48, 24)
     if style == "faceted":
@@ -491,6 +424,18 @@ def styled_module_outline(style, center_x, center_y, pitch):
         ]
     if style == "rounded":
         return rounded_rectangle_outline(center_x, center_y, pitch * 0.96, pitch * 0.96, pitch * 0.22)
+    if style == "triangle":
+        radius = pitch * 0.49
+        points = [
+            (center_x, center_y + radius),
+            (center_x - radius, center_y + radius * 0.2),
+            (center_x - radius, center_y - radius),
+            (center_x + radius, center_y - radius),
+            (center_x + radius, center_y + radius * 0.2),
+        ]
+        if (row + column) % 2:
+            points = [(2 * center_x - x, 2 * center_y - y) for x, y in points]
+        return [(round(x, 6), round(y, 6)) for x, y in points]
     return rectangle_outline(center_x, center_y, pitch, pitch)
 
 
@@ -659,7 +604,9 @@ class Token:
                         continue
                     center_x = (column + 0.5) * self.module - offset + self.qr_offset_x
                     center_y = offset - (row + 0.5) * self.module + self.qr_offset_y
-                    outlines.append(styled_module_outline(self.module_style, center_x, center_y, self.module))
+                    outlines.append(styled_module_outline(
+                        self.module_style, center_x, center_y, self.module, row, column
+                    ))
             finder_positions = [
                 (self.qr_offset_x - offset, self.qr_offset_y + offset - 7 * self.module),
                 (self.qr_offset_x + offset - 7 * self.module, self.qr_offset_y + offset - 7 * self.module),
@@ -927,7 +874,7 @@ def create_token(data, nozzle=0.4, filament_count=2):
         raise InputError("This URL is too long for a QR code.") from error
     matrix = qr.get_matrix()
     # The entire QR plus its four-module quiet zone fits with the requested physical edge padding.
-    style_scale = {"square": 1, "rounded": 0.96, "dots": 0.96, "faceted": 0.96}[module_style]
+    style_scale = {"square": 1, "rounded": 0.96, "dots": 0.96, "faceted": 0.96, "triangle": 0.96}[module_style]
     min_module = max(0.6, nozzle * 2) / style_scale
     perimeter_inset = 0 if top_profile == "straight" else top_size
     qr_offset_x = 0

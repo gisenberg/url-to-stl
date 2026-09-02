@@ -179,6 +179,14 @@ def main():
             },
         ),
         (
+            "styled-triangles",
+            {
+                "treatment": "inset",
+                "diameter": 80,
+                "module_style": "triangle",
+            },
+        ),
+        (
             "exact-radius-and-padding-inches",
             {
                 "treatment": "inset",

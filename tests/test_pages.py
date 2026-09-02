@@ -14,7 +14,8 @@ def test_pages_build_is_the_generator_without_server_routes():
         assert "Small token." not in html
         assert "Business card" in html
         assert "Brand icon" in html
-        assert "QR modules" in html
+        assert "Module shape" in html
+        assert "Triangles" in html
         assert "Finder frame" in html
         assert "Finder center" in html
         assert "Light border padding" in html
@@ -30,6 +31,8 @@ def test_pages_build_is_the_generator_without_server_routes():
             "profiles/x2d-04-pla.3mf",
             "vendor/three.module.js",
             "licenses/manifold-3d-LICENSE.txt",
+            "licenses/fontawesome-free-brands-LICENSE.txt",
+            "licenses/svg-pathdata-LICENSE.txt",
         ):
             assert (output / relative).is_file()
     finally:

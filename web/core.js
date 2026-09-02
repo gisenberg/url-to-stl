@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
+import FONT_AWESOME_DATA from '../assets/fontawesome-brands.json' with { type: 'json' };
 
 export class InputError extends Error {}
 
@@ -9,7 +10,7 @@ const CORNER_STYLES = new Set(['default', 'sharp', 'softened', 'rounded', 'custo
 const EDGE_PROFILES = new Set(['straight', 'chamfered', 'rounded', 'inset', 'tapered']);
 const TOKEN_PRESETS = new Set(['custom', 'business-card']);
 const TOKEN_ICONS = new Set(['none', 'instagram', 'x', 'facebook', 'linkedin', 'youtube', 'tiktok']);
-const QR_MODULE_STYLES = new Set(['square', 'rounded', 'dots', 'faceted']);
+const QR_MODULE_STYLES = new Set(['square', 'rounded', 'dots', 'faceted', 'triangle']);
 const QR_FINDER_STYLES = new Set(['square', 'rounded', 'circle']);
 const QR_FINDER_CENTER_STYLES = new Set(['square', 'rounded', 'circle', 'diamond']);
 const QR_CENTER_ICONS = new Set(['none', 'blank', 'instagram', 'x', 'facebook', 'linkedin', 'youtube', 'tiktok']);
@@ -264,52 +265,10 @@ function circleOutline(cx, cy, radius, segments = 32) {
   });
 }
 
-function rotatedRectangle(cx, cy, length, width, angle) {
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  return rectangleOutline(0, 0, length, width).map(([x, y]) => [
-    round(cx + x * cos - y * sin), round(cy + x * sin + y * cos),
-  ]);
-}
-
 function iconOutlines(icon, centerX, centerY, size) {
   if (icon === 'none') return [];
-  const outlines = [];
-  const addRect = (x, y, width, height) => outlines.push(rectangleOutline(
-    centerX + x * size, centerY + y * size, width * size, height * size));
-  const addCircle = (x, y, radius) => outlines.push(circleOutline(
-    centerX + x * size, centerY + y * size, radius * size));
-  if (icon === 'instagram') {
-    const stroke = .1;
-    addRect(0, .4, .8, stroke); addRect(0, -.4, .8, stroke);
-    addRect(-.4, 0, stroke, .8); addRect(.4, 0, stroke, .8);
-    for (let step = 0; step < 16; step++) {
-      const a = Math.PI * 2 * step / 16;
-      const b = Math.PI * 2 * (step + 1) / 16;
-      outlines.push([[.24*Math.cos(a), .24*Math.sin(a)], [.24*Math.cos(b), .24*Math.sin(b)],
-        [.14*Math.cos(b), .14*Math.sin(b)], [.14*Math.cos(a), .14*Math.sin(a)]]
-        .map(([x, y]) => [round(centerX + x*size), round(centerY + y*size)]));
-    }
-    addCircle(.25, .25, .055);
-  } else if (icon === 'x') {
-    outlines.push(rotatedRectangle(centerX, centerY, size * .92, size * .12, Math.PI * .29));
-    outlines.push(rotatedRectangle(centerX, centerY, size * .92, size * .12, -Math.PI * .29));
-  } else if (icon === 'facebook') {
-    addRect(-.06, -.03, .16, .82); addRect(.12, .35, .48, .16); addRect(.1, .06, .42, .15);
-  } else if (icon === 'linkedin') {
-    addCircle(-.34, .34, .09); addRect(-.34, -.14, .16, .62);
-    addRect(-.02, -.14, .16, .62); addRect(.3, -.14, .16, .62); addRect(.14, .15, .48, .15);
-  } else if (icon === 'youtube') {
-    const stroke = .09;
-    addRect(0, .34, .86, stroke); addRect(0, -.34, .86, stroke);
-    addRect(-.43, 0, stroke, .68); addRect(.43, 0, stroke, .68);
-    outlines.push([[-.12, -.2], [-.12, .2], [.24, 0]].map(([x, y]) =>
-      [round(centerX + x*size), round(centerY + y*size)]));
-  } else if (icon === 'tiktok') {
-    addRect(.08, .06, .14, .68); addRect(.22, .35, .42, .14);
-    addCircle(-.12, -.3, .2); addCircle(.38, .25, .11);
-  }
-  return outlines;
+  return FONT_AWESOME_DATA.icons[icon].outlines.map(outline => outline.map(([x, y]) =>
+    [round(centerX + x * size), round(centerY + y * size)]));
 }
 
 function roundedRectangleOutline(cx, cy, width, height, radius, segments = 4) {
@@ -383,7 +342,7 @@ function finderOutlines(style, centerStyle, left, bottom, pitch) {
   return outlines;
 }
 
-function styledModuleOutline(style, centerX, centerY, pitch) {
+function styledModuleOutline(style, centerX, centerY, pitch, row = 0, column = 0) {
   if (style === 'dots') return circleOutline(centerX, centerY, pitch * .48, 24);
   if (style === 'faceted') {
     const radius = pitch * .49;
@@ -396,6 +355,14 @@ function styledModuleOutline(style, centerX, centerY, pitch) {
   }
   if (style === 'rounded') {
     return roundedRectangleOutline(centerX, centerY, pitch * .96, pitch * .96, pitch * .22, 4);
+  }
+  if (style === 'triangle') {
+    const radius = pitch * .49;
+    let points = [[centerX, centerY + radius], [centerX - radius, centerY + radius * .2],
+      [centerX - radius, centerY - radius], [centerX + radius, centerY - radius],
+      [centerX + radius, centerY + radius * .2]];
+    if ((row + column) % 2) points = points.map(([x, y]) => [2 * centerX - x, 2 * centerY - y]);
+    return points.map(point => point.map(value => round(value)));
   }
   return rectangleOutline(centerX, centerY, pitch, pitch);
 }
@@ -416,7 +383,7 @@ function featureOutlines(token) {
         if (row >= centerStart && row < centerEnd && column >= centerStart && column < centerEnd) continue;
         const centerX = (column + .5) * token.module_size - offset + token.qr_offset_x;
         const centerY = offset - (row + .5) * token.module_size + token.qr_offset_y;
-        outlines.push(styledModuleOutline(token.module_style, centerX, centerY, token.module_size));
+        outlines.push(styledModuleOutline(token.module_style, centerX, centerY, token.module_size, row, column));
       }
     }
     const finderPositions = [
@@ -550,7 +517,7 @@ export function createToken(data, profile) {
   const modules = qr.modules.size;
   const matrix = Array.from({ length: modules }, (_, row) =>
     Array.from({ length: modules }, (_, column) => Boolean(qr.modules.get(row, column))));
-  const styleScale = { square: 1, rounded: .96, dots: .96, faceted: .96 }[moduleStyle];
+  const styleScale = { square: 1, rounded: .96, dots: .96, faceted: .96, triangle: .96 }[moduleStyle];
   const minimumModule = Math.max(0.6, nozzle * 2) / styleScale;
   const perimeterInset = topProfile === 'straight' ? 0 : topSize;
   let minimumDiameter;

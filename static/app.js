@@ -34,8 +34,21 @@ function setDownloadMenu(open, focus = false) {
   toggle.setAttribute('aria-expanded', String(show));
   if (show && focus) $('download-3mf-menu').focus();
 }
+function choiceValue(name) {
+  return form.querySelector(`input[name="${name}"]:checked`)?.value;
+}
+function setChoice(name, value) {
+  const input = form.querySelector(`input[name="${name}"][value="${value}"]`);
+  if (input) input.checked = true;
+}
+function setChoiceGroupDisabled(name, disabled) {
+  for (const input of form.querySelectorAll(`input[name="${name}"]`)) input.disabled = disabled;
+}
 function values() {
-  return { ...Object.fromEntries(new FormData(form)), correction: $('correction').value, template };
+  const data = { ...Object.fromEntries(new FormData(form)), correction: $('correction').value, template };
+  data.preset = data.shape === 'business-card' ? 'business-card' : 'custom';
+  if (data.preset === 'business-card') data.shape = 'rectangle';
+  return data;
 }
 function measurement(value) {
   return Number(value).toFixed(1).replace(/\.0$/, '');
@@ -67,14 +80,11 @@ async function post(path, data, signal) {
 function updateFields() {
   $('diameter-display').innerHTML = `${measurement($('diameter').value)} <small>mm</small>`;
   $('height-display').innerHTML = `${measurement($('shape_height').value)} <small>mm</small>`;
-  const businessCard = $('preset').value === 'business-card';
-  const shape = $('shape').value;
+  const selectedShape = $('shape').value;
+  const businessCard = selectedShape === 'business-card';
+  const shape = businessCard ? 'rectangle' : selectedShape;
   $('size-label').textContent = shape === 'circle' ? 'Diameter' : 'Width';
   $('business-options').hidden = !businessCard;
-  $('preset-note').textContent = businessCard
-    ? 'Standard 85.6 × 54 mm card with a right-aligned QR and optional icon panel.'
-    : 'Set the shape and dimensions independently.';
-  $('shape').disabled = businessCard;
   $('diameter').disabled = businessCard;
   $('shape_height').disabled = businessCard;
   $('height-row').hidden = shape !== 'rectangle';
@@ -141,22 +151,23 @@ function updateFields() {
       ? 'The dark QR and light background are complementary material parts with one level top surface. Bambu Studio assigns each part to its AMS filament.'
       : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
   const centerBadge = $('center_icon').value !== 'none';
-  const finderFrame = $('finder_style').value;
-  const centerOptions = $('finder_center_style').options;
-  for (const option of centerOptions) {
-    option.disabled = (finderFrame !== 'circle' && option.value === 'diamond')
-      || (finderFrame === 'circle' && option.value === 'square');
-  }
-  if ($('finder_center_style').selectedOptions[0]?.disabled) {
-    $('finder_center_style').value = finderFrame === 'circle' ? 'circle' : 'rounded';
-  }
-  $('module_style').disabled = centerBadge;
-  $('finder_style').disabled = centerBadge;
-  $('finder_center_style').disabled = centerBadge;
+  const finderFrame = choiceValue('finder_style');
+  const centerOptions = form.querySelectorAll('input[name="finder_center_style"]');
+  setChoiceGroupDisabled('module_style', centerBadge);
+  setChoiceGroupDisabled('finder_style', centerBadge);
+  setChoiceGroupDisabled('finder_center_style', centerBadge);
   if (centerBadge) {
-    $('module_style').value = 'square';
-    $('finder_style').value = 'square';
-    $('finder_center_style').value = 'square';
+    setChoice('module_style', 'square');
+    setChoice('finder_style', 'square');
+    setChoice('finder_center_style', 'square');
+  } else {
+    for (const option of centerOptions) {
+      option.disabled = (finderFrame !== 'circle' && option.value === 'diamond')
+        || (finderFrame === 'circle' && option.value === 'square');
+    }
+    if (form.querySelector('input[name="finder_center_style"]:checked')?.disabled) {
+      setChoice('finder_center_style', finderFrame === 'circle' ? 'circle' : 'rounded');
+    }
   }
   $('correction').disabled = centerBadge;
   if (centerBadge) $('correction').value = 'H';
@@ -348,7 +359,7 @@ function setupScene() {
   canvas.addEventListener('pointercancel', () => {drag = null;});
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
-    const minimum = viewMode === 'detail' && token ? Math.max(token.shape_width, token.shape_height) * 1.25 : bedSpan * .75;
+    const minimum = viewMode === 'detail' && token ? previewSpan() * 1.25 : bedSpan * .75;
     distance = Math.max(minimum, Math.min(bedSpan*3.2, distance * (e.deltaY > 0 ? 1.08 : .92)));
     render();
   }, {passive: false});
@@ -373,14 +384,14 @@ function updateBed() {
   });
   shape.closePath();
   const plate = new THREE.Mesh(new THREE.ShapeGeometry(shape),
-    new THREE.MeshStandardMaterial({color: 0xdde2d7, roughness: .95, metalness: .04, side: THREE.DoubleSide}));
+    new THREE.MeshStandardMaterial({color: 0x8f9492, roughness: .95, metalness: .04, side: THREE.DoubleSide}));
   plate.rotation.x = -Math.PI/2; plate.position.y = -.08; plate.receiveShadow = true;
   bedGroup.add(plate);
 
   const borderPoints = profile.bed_points.map(([x, z]) => new THREE.Vector3(x, -.055, -z));
   borderPoints.push(borderPoints[0].clone());
   const border = new THREE.Line(new THREE.BufferGeometry().setFromPoints(borderPoints),
-    new THREE.LineBasicMaterial({color: 0x899687}));
+    new THREE.LineBasicMaterial({color: 0x414745}));
   bedGroup.add(border);
 
   const halfWidth = profile.bed_width/2, halfDepth = profile.bed_depth/2;
@@ -392,7 +403,7 @@ function updateBed() {
     gridPoints.push(new THREE.Vector3(-halfWidth, -.05, z), new THREE.Vector3(halfWidth, -.05, z));
   }
   const grid = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(gridPoints),
-    new THREE.LineBasicMaterial({color: 0xbcc5b8, transparent: true, opacity: .5}));
+    new THREE.LineBasicMaterial({color: 0x626866, transparent: true, opacity: .72}));
   bedGroup.add(grid);
   scene.add(bedGroup);
   bedSpan = Math.max(profile.bed_width, profile.bed_depth);
@@ -479,23 +490,23 @@ function updateModel() {
   }
   arrangeModelParts();
   scene.add(group);
-  distance = viewMode === 'detail' ? Math.max(Math.max(token.shape_width, token.shape_height) * 1.85, 90) : bedSpan * 1.68;
+  distance = viewMode === 'detail' ? Math.max(previewSpan() * 1.72, 90) : bedSpan * 1.68;
   updateViewLabels();
   render();
+}
+function previewSpan() {
+  if (!token) return 60;
+  const width = token.construction === 'two-piece' ? token.shape_width * 2 + 6 : token.shape_width;
+  return Math.max(width, token.shape_height);
 }
 function arrangeModelParts() {
   if (!group?.userData.basePart || !group?.userData.topPart || token?.construction !== 'two-piece') return;
   const basePart = group.userData.basePart;
   const topPart = group.userData.topPart;
   basePart.position.set(0, 0, 0);
-  topPart.position.set(0, token.base, 0);
-  if (viewMode === 'bed') {
-    const spacing = token.shape_width / 2 + 3;
-    basePart.position.x = -spacing;
-    topPart.position.set(spacing, 0, 0);
-  } else {
-    topPart.position.y = token.base + 2;
-  }
+  const spacing = token.shape_width / 2 + 3;
+  basePart.position.x = -spacing;
+  topPart.position.set(spacing, 0, 0);
 }
 function render() {
   if (!renderer) return;
@@ -513,7 +524,7 @@ function switchView(view) {
   viewMode = view;
   if (view === 'detail') {
     azimuth = -.55; elevation = .42;
-    distance = token ? Math.max(Math.max(token.shape_width, token.shape_height) * 1.85, 90) : 110;
+    distance = token ? Math.max(previewSpan() * 1.72, 90) : 110;
   } else if (view === 'bed') {
     azimuth = -.2; elevation = 1.03; distance = bedSpan * 1.68;
   }
@@ -537,7 +548,9 @@ function updateViewLabels() {
     const depth = token.treatment === 'flat' ? `${token.height} MM THICK`
       : `${token.relief} MM ${token.treatment === 'inset' ? 'DEEP' : 'HIGH'}`;
     $('bed-reference').textContent = `${label} ${token.treatment.toUpperCase()} · ${depth}${edge}`;
-    $('orbit-hint').textContent = 'TRUE DEPTH · DRAG TO ROTATE · SCROLL TO ZOOM';
+    $('orbit-hint').textContent = token.construction === 'two-piece'
+      ? 'TWO BED-READY PIECES · DRAG TO ROTATE · SCROLL TO ZOOM'
+      : 'TRUE DEPTH · DRAG TO ROTATE · SCROLL TO ZOOM';
   } else {
     $('bed-reference').textContent = `${profile.printer.replace('Bambu Lab ', '')} BED · ${profile.bed_width} × ${profile.bed_depth} MM`;
     $('orbit-hint').textContent = 'DRAG TO ROTATE · SCROLL TO ZOOM';
@@ -592,9 +605,8 @@ async function download(kind) {
   }
 }
 
-$('preset').addEventListener('input', () => {
-  if ($('preset').value === 'business-card') {
-    $('shape').value = 'rectangle';
+$('shape').addEventListener('change', () => {
+  if ($('shape').value === 'business-card') {
     $('corner_style').value = 'custom';
     $('corner_radius').value = measurementValue(3.2, $('corner_radius_unit').value);
     $('diameter').value = '85.6';

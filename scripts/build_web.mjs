@@ -21,14 +21,16 @@ await build({
 });
 await cp(join(root, 'node_modules', 'manifold-3d', 'manifold.wasm'), join(output, 'manifold.wasm'));
 const licenses = [
-  ['fflate', 'LICENSE'],
-  ['jsqr', 'LICENSE'],
-  ['manifold-3d', 'LICENSE'],
-  ['qrcode', 'license'],
+  ['fflate', 'LICENSE', 'fflate-LICENSE.txt'],
+  ['jsqr', 'LICENSE', 'jsqr-LICENSE.txt'],
+  ['manifold-3d', 'LICENSE', 'manifold-3d-LICENSE.txt'],
+  ['qrcode', 'license', 'qrcode-LICENSE.txt'],
+  ['@fortawesome/free-brands-svg-icons', 'LICENSE.txt', 'fontawesome-free-brands-LICENSE.txt'],
+  ['svg-pathdata', 'LICENSE', 'svg-pathdata-LICENSE.txt'],
 ];
 await mkdir(join(output, 'licenses'));
-for (const [name, filename] of licenses) {
-  await cp(join(root, 'node_modules', name, filename), join(output, 'licenses', `${name}-LICENSE.txt`));
+for (const [name, filename, outputName] of licenses) {
+  await cp(join(root, 'node_modules', name, filename), join(output, 'licenses', outputName));
 }
 
 console.log(`Built static browser generator at ${output}`);
