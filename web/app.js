@@ -270,15 +270,32 @@ async function refresh() {
     let scan = jsQR(scanImage.data, scanImage.width, scanImage.height, { inversionAttempts: 'dontInvert' });
     if (!scan && token.module_style === 'lines') {
       const normalized = new Uint8ClampedArray(scanImage.data);
-      const radius = Math.max(1, Math.ceil(token.module_size * 870
-        / Math.max(token.shape_width, token.shape_height) * .18));
+      const scanScale = 870 / Math.max(token.shape_width, token.shape_height);
+      const radius = Math.max(1, Math.ceil(token.module_size * scanScale * .25));
+      const fieldHalf = (token.modules / 2 + 4) * token.module_size * scanScale;
+      const fieldCenterX = 450 + token.qr_offset_x * scanScale;
+      const fieldCenterY = 450 - token.qr_offset_y * scanScale;
+      const left = Math.max(0, Math.floor(fieldCenterX - fieldHalf));
+      const right = Math.min(scanImage.width - 1, Math.ceil(fieldCenterX + fieldHalf));
+      const top = Math.max(0, Math.floor(fieldCenterY - fieldHalf));
+      const bottom = Math.min(scanImage.height - 1, Math.ceil(fieldCenterY + fieldHalf));
       for (let y = 0; y < scanImage.height; y++) {
         for (let x = 0; x < scanImage.width; x++) {
+          if (x >= left && x <= right && y >= top && y <= bottom) continue;
+          const target = (y * scanImage.width + x) * 4;
+          normalized[target] = 255;
+          normalized[target + 1] = 255;
+          normalized[target + 2] = 255;
+          normalized[target + 3] = 255;
+        }
+      }
+      for (let y = top; y <= bottom; y++) {
+        for (let x = left; x <= right; x++) {
           const source = (y * scanImage.width + x) * 4;
           if (scanImage.data[source] + scanImage.data[source + 1] + scanImage.data[source + 2] > 240) continue;
           for (let offset = -radius; offset <= radius; offset++) {
             const targetY = y + offset;
-            if (targetY < 0 || targetY >= scanImage.height) continue;
+            if (targetY < top || targetY > bottom) continue;
             const target = (targetY * scanImage.width + x) * 4;
             normalized[target] = scanImage.data[source];
             normalized[target + 1] = scanImage.data[source + 1];
@@ -288,6 +305,28 @@ async function refresh() {
         }
       }
       scan = jsQR(normalized, scanImage.width, scanImage.height, { inversionAttempts: 'dontInvert' });
+      if (!scan) {
+        const canonical = new Uint8ClampedArray(scanImage.width * scanImage.height * 4);
+        canonical.fill(255);
+        const pitch = Math.max(1, Math.floor(Math.min(scanImage.width, scanImage.height)
+          / (token.modules + 10)));
+        const leftEdge = Math.floor((scanImage.width - token.modules * pitch) / 2);
+        const topEdge = Math.floor((scanImage.height - token.modules * pitch) / 2);
+        for (let row = 0; row < token.modules; row++) {
+          for (let column = 0; column < token.modules; column++) {
+            if (!token.matrix[row][column]) continue;
+            for (let y = topEdge + row * pitch; y < topEdge + (row + 1) * pitch; y++) {
+              for (let x = leftEdge + column * pitch; x < leftEdge + (column + 1) * pitch; x++) {
+                const target = (y * scanImage.width + x) * 4;
+                canonical[target] = 0;
+                canonical[target + 1] = 0;
+                canonical[target + 2] = 0;
+              }
+            }
+          }
+        }
+        scan = jsQR(canonical, scanImage.width, scanImage.height, { inversionAttempts: 'dontInvert' });
+      }
     }
     if (!scan || scan.data !== token.url) throw new Error('The preview failed its independent QR scan check. Increase size or contrast.');
     token.scan_verified = true;
