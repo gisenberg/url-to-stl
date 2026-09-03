@@ -29,6 +29,9 @@ test('Pages build contains the complete generator without server routes', async 
       'Finder frame',
       'Finder center',
       'Outer framing',
+      'Double',
+      'Band width',
+      'Edge gap',
       '<details id="qr-advanced" open>',
       'Light border padding',
       'Corner radius',
@@ -36,6 +39,7 @@ test('Pages build contains the complete generator without server routes', async 
       'Flat · dark code flush with a light face',
       'Two pieces · separate base and cap',
       'Download Bambu 3MF',
+      'SVG geometry',
     ]) assert.ok(html.includes(expected), `Missing page content: ${expected}`);
     for (const excluded of ['A LINK YOU CAN HOLD', 'Small token.', 'Download for Windows']) {
       assert.ok(!html.includes(excluded), `Unexpected page content: ${excluded}`);

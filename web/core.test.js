@@ -10,6 +10,7 @@ import {
   createToken,
   encodeBambu3mf,
   encodeBinaryStl,
+  encodeQrSvg,
   inspect3mf,
   parseTemplate,
   tokenFilename,
@@ -65,6 +66,8 @@ test('rejects invalid URLs, dimensions, colors, and filament assignments', () =>
     { url: 'https://example.com', edge_size: 3 },
     { url: 'https://example.com', module_style: 'hearts' },
     { url: 'https://example.com', outer_frame: 'flower' },
+    { url: 'https://example.com', outer_frame: 'outline', outer_frame_width: .2 },
+    { url: 'https://example.com', outer_frame: 'outline', outer_frame_gap: 7 },
     { url: 'https://example.com', finder_style: 'flower' },
     { url: 'https://example.com', finder_center_style: 'star' },
     { url: 'https://example.com', finder_style: 'square', finder_center_style: 'diamond' },
@@ -212,6 +215,28 @@ test('print-safe module and finder styles produce printable geometry', () => {
   }
 });
 
+test('rounded groups, faceted cells, and linked dots have distinct geometry', () => {
+  const settings = { url: 'https://example.com', diameter: 90, treatment: 'inset' };
+  const rounded = createToken({ ...settings, module_style: 'rounded' }, parsed.profile);
+  const faceted = createToken({ ...settings, module_style: 'faceted' }, parsed.profile);
+  const dots = createToken({ ...settings, module_style: 'dots' }, parsed.profile);
+  const roundedData = rounded.feature_outlines.slice(0, -15);
+  const facetedData = faceted.feature_outlines.slice(0, -15);
+  const dotData = dots.feature_outlines.slice(0, -15);
+  assert.ok(roundedData.some(outline => ![4, 24].includes(outline.length)));
+  assert.ok(facetedData.every(outline => outline.length === 8));
+  assert.ok(dotData.some(outline => outline.length === 24));
+  assert.ok(dotData.some(outline => outline.length === 4));
+  assert.ok(dotData.length > facetedData.length);
+  const facetedFirst = facetedData[0];
+  assert.equal(new Set(facetedFirst.map(([x]) => x)).size, 4);
+  const dotWidth = Math.max(...dotData[0].map(([x]) => x)) - Math.min(...dotData[0].map(([x]) => x));
+  assert.ok(dotWidth < dots.module_size * .98);
+  assert.ok(buildMesh(manifold, rounded).volume > 0);
+  assert.ok(buildMesh(manifold, faceted).volume > 0);
+  assert.ok(buildMesh(manifold, dots).volume > 0);
+});
+
 test('triangle modules share boundaries and form connected angular groups', () => {
   const token = createToken({
     url: 'https://example.com', diameter: 80, treatment: 'inset', module_style: 'triangle',
@@ -270,6 +295,37 @@ test('outer outline preserves printable QR clearance', () => {
   assert.equal(token.correction, 'H');
   assert.ok(token.warnings.some(warning => warning.includes('line modules')));
   assert.ok(buildMesh(manifold, token).volume > 0);
+});
+
+test('single and double perimeter frames honor width and gap controls', () => {
+  const common = {
+    url: 'https://example.com', diameter: 100, treatment: 'inset', outer_frame_width: 1.2,
+    outer_frame_gap: .7,
+  };
+  const single = createToken({ ...common, outer_frame: 'outline' }, parsed.profile);
+  const double = createToken({ ...common, outer_frame: 'double' }, parsed.profile);
+  assert.equal(single.outer_frame_width, 1.2);
+  assert.equal(single.outer_frame_gap, .7);
+  assert.equal(double.outer_frame_width, 1.2);
+  assert.equal(double.outer_frame_gap, .7);
+  assert.ok(double.feature_outlines.length > single.feature_outlines.length);
+  assert.ok(double.module_size < single.module_size);
+  assert.ok(buildMesh(manifold, single).volume > 0);
+  assert.ok(buildMesh(manifold, double).volume > 0);
+});
+
+test('exports millimeter-scale SVG token and QR geometry', () => {
+  const token = createToken({
+    url: 'https://example.com/?a=1&b=2', shape: 'rectangle', diameter: 90, shape_height: 50,
+    treatment: 'inset', module_style: 'rounded', outer_frame: 'double',
+  }, parsed.profile);
+  const svg = encodeQrSvg(token);
+  assert.match(svg, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+  assert.match(svg, /width="90mm" height="50mm" viewBox="0 0 90 50"/);
+  assert.match(svg, /id="token-background"/);
+  assert.match(svg, /id="qr-geometry"/);
+  assert.match(svg, /example\.com\/\?a=1&amp;b=2/);
+  assert.ok(!svg.includes('NaN'));
 });
 
 test('independent finder frame and center styles produce printable geometry', () => {

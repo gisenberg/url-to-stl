@@ -3,8 +3,8 @@
 QR Token Studio is a free browser-based generator for raised, inset, flat, or two-piece QR tokens with Bambu Studio AMS assignments.
 Choose a circle, square, independently sized rectangle, pentagon, or hexagon.
 The Business Card starting shape creates an 85.6 × 54 mm card with a right-aligned QR and an optional Font Awesome Instagram, X, Facebook, LinkedIn, YouTube, or TikTok brand mark.
-QR styling includes classic blocks, rounded tiles, merged line runs, jagged connected triangle groups, dots, faceted tiles, independently selected finder frames and centers, an optional perimeter outline, and protected center badges.
-Enter a URL, set the dimensions, and download a Bambu project `.3mf`, watertight `.stl`, or QR preview `.png` directly from the web app.
+QR styling includes classic blocks, neighbor-aware rounded groups, merged line runs, jagged connected triangle groups, linked dot networks, strongly faceted tiles, independently selected finder frames and centers, configurable single or double perimeter bands, and protected center badges.
+Enter a URL, set the dimensions, and download a Bambu project `.3mf`, watertight `.stl`, millimeter-scale vector `.svg`, or QR preview `.png` directly from the web app.
 The entered URL, imported profile, and generated geometry stay in the browser and are never uploaded.
 
 [Open QR Token Studio](https://gisenberg.github.io/url-to-stl/)
@@ -15,11 +15,11 @@ The entered URL, imported profile, and generated geometry stay in the browser an
 2. Choose a starting shape, dimensions, raised, inset, or flat QR treatment, base thickness, and feature depth.
    Rectangles have independent width and height controls.
    Open **Shape and edge details** for exact corner radii, physical border padding, and lower or top edge treatments.
-   **QR appearance** stays open so its graphical module shape, finder-frame style, finder-center style, optional perimeter outline, and center badge controls remain visible.
+   **QR appearance** stays open so its graphical module shape, finder-frame style, finder-center style, perimeter-band controls, and center badge controls remain visible.
    Center badges reserve a bounded light area and lock classic modules, square finder frames and centers, and High error correction because that combination survives native slicing.
    The size slider starts at the shape-specific minimum printable width for the current URL and nozzle.
 3. Download **Bambu 3MF**.
-   Use the arrow segment on the download button when you need geometry-only STL instead.
+   Use the arrow segment on the download button when you need geometry-only STL or editable SVG paths instead.
 4. Open it **as a project** in Bambu Studio so its settings, material parts, and any layer event are retained.
 5. Slice and confirm the preview shows a dark QR against a light surface with the expected filament assignments.
 6. Map the two project filaments to the desired physical AMS slots in the print dialog.
@@ -64,6 +64,7 @@ Changing layer height or scaling Z later in the slicer can move the intended bou
 
 STL stores geometry only.
 Download 3MF to retain the automatic layer change.
+SVG stores the token perimeter and visible QR geometry as separate millimeter-scale vector paths for CAD, laser, and design workflows.
 The PNG export is a top-view preview rather than a replacement for the 3D model.
 
 ## Geometry and print safeguards
@@ -78,13 +79,13 @@ The PNG export is a top-view preview rather than a replacement for the 3D model.
 - Bed scale view shows the token at real scale on a gray representation of the selected profile’s print bed.
 - Two-piece inset construction displays and exports the base and cap side by side on that bed.
 - The generated preview uses a high-contrast dark QR and light surface.
-- Print-safe QR patterns include classic blocks, rounded tiles, merged horizontal lines, jagged connected triangle groups, dots, and faceted tiles.
+- Print-safe QR patterns include classic blocks, joined rounded groups, merged horizontal lines, jagged connected triangle groups, linked dot networks, and strongly clipped faceted tiles.
 - Line modules automatically use High error correction because native sliced toolpaths retain more reliable redundancy at their printable spacing.
-- The optional perimeter outline follows the token shape outside the required four-module QR quiet zone.
+- Single and double perimeter bands follow the token shape outside the required four-module QR quiet zone with adjustable band width and edge or inter-band gap.
 - Finder treatments separate square, rounded, or circular outer frames from square, rounded, circular, or diamond centers.
 - The UI limits the diamond center to the circular frame and prevents the circular-frame/square-center pairing because those alternatives fail independent scan checks.
 - A clear center or social icon badge removes only a bounded central module region, preserves the quiet zone and finder eyes, locks classic modules with square finder frames and centers, and forces High error correction.
-- Every browser preview is independently decoded with jsQR before export is enabled.
+- Every browser preview is independently decoded with jsQR before export is enabled, with rendered module-center resampling for stylized geometry that a square-module locator cannot detect directly.
 - Manifold WebAssembly performs the 2D and 3D boolean operations that produce watertight single or complementary material parts.
 - A 0.01 mm corner relief prevents diagonal QR cells from creating non-manifold edges when an STL reader welds vertices.
 - Print settings preserve two walls on top surfaces to avoid hollow centers in isolated QR modules.
@@ -120,7 +121,7 @@ npm test
 npm run check
 ```
 
-The Node test suite checks profile parsing, dimensions, all supported shapes and treatments, material parts, Manifold geometry, STL encoding, and Bambu 3MF metadata.
+The Node test suite checks profile parsing, dimensions, all supported shapes and treatments, material parts, distinct QR geometry, perimeter bands, SVG output, Manifold geometry, STL encoding, and Bambu 3MF metadata.
 The Pages-build test verifies that the deployment contains every required static asset and no server API dependency.
 The browser independently decodes every generated preview before enabling export.
 Representative raised, inset, flat, two-piece, styled, and business-card projects from the current browser exporter have also been sliced successfully with Bambu Studio and checked for material assignment and decodable top-layer toolpaths.

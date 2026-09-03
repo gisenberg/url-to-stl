@@ -8,6 +8,7 @@ import {
   createToken,
   encodeBambu3mf,
   encodeBinaryStl,
+  encodeQrSvg,
   parseTemplate,
   tokenFilename,
 } from './core.js';
@@ -15,7 +16,7 @@ import {
 const $ = id => document.getElementById(id);
 const form = $('settings');
 const buttons = [
-  $('download-3mf'), $('download-menu-toggle'), $('download-3mf-menu'), $('download-stl'), $('download-png'),
+  $('download-3mf'), $('download-menu-toggle'), $('download-3mf-menu'), $('download-stl'), $('download-svg'), $('download-png'),
 ];
 let template, defaultTemplateBytes, profile, token, valid = false, exporting = false;
 let generation = 0, timer;
@@ -159,6 +160,11 @@ function updateFields() {
       : 'The dark QR rises above the light base and begins immediately after one AMS swap.';
   const centerBadge = $('center_icon').value !== 'none';
   const lineModules = choiceValue('module_style') === 'lines';
+  const outerFrame = choiceValue('outer_frame');
+  const framed = outerFrame !== 'none';
+  $('outer-frame-options').hidden = !framed;
+  $('outer_frame_width').disabled = !framed;
+  $('outer_frame_gap').disabled = !framed;
   const finderFrame = choiceValue('finder_style');
   const centerOptions = form.querySelectorAll('input[name="finder_center_style"]');
   setChoiceGroupDisabled('module_style', centerBadge);
@@ -216,6 +222,47 @@ function invalidate() {
   clearTimeout(timer);
   timer = setTimeout(refresh, 250);
 }
+
+function scanNormalizedGeometry(scanImage, currentToken) {
+  const width = scanImage.width;
+  const height = scanImage.height;
+  const normalized = new Uint8ClampedArray(width * height * 4);
+  normalized.fill(255);
+  const outputPitch = Math.max(4, Math.floor(Math.min(width, height) / (currentToken.modules + 10)));
+  const outputLeft = Math.floor((width - currentToken.modules * outputPitch) / 2);
+  const outputTop = Math.floor((height - currentToken.modules * outputPitch) / 2);
+  const scale = 870 / Math.max(currentToken.shape_width, currentToken.shape_height);
+  const offset = currentToken.modules * currentToken.module_size / 2;
+  const sampleRadius = Math.max(1, Math.floor(currentToken.module_size * scale * .1));
+  for (let row = 0; row < currentToken.modules; row++) {
+    for (let column = 0; column < currentToken.modules; column++) {
+      const modelX = (column + .5) * currentToken.module_size - offset + currentToken.qr_offset_x;
+      const modelY = offset - (row + .5) * currentToken.module_size + currentToken.qr_offset_y;
+      const centerX = Math.round(450 + modelX * scale);
+      const centerY = Math.round(450 - modelY * scale);
+      let channelTotal = 0;
+      let samples = 0;
+      for (let y = centerY - sampleRadius; y <= centerY + sampleRadius; y++) {
+        for (let x = centerX - sampleRadius; x <= centerX + sampleRadius; x++) {
+          const source = (y * width + x) * 4;
+          channelTotal += scanImage.data[source] + scanImage.data[source + 1] + scanImage.data[source + 2];
+          samples++;
+        }
+      }
+      if (channelTotal / samples > 400) continue;
+      for (let y = outputTop + row * outputPitch; y < outputTop + (row + 1) * outputPitch; y++) {
+        for (let x = outputLeft + column * outputPitch; x < outputLeft + (column + 1) * outputPitch; x++) {
+          const target = (y * width + x) * 4;
+          normalized[target] = 0;
+          normalized[target + 1] = 0;
+          normalized[target + 2] = 0;
+        }
+      }
+    }
+  }
+  return jsQR(normalized, width, height, { inversionAttempts: 'dontInvert' });
+}
+
 async function refresh() {
   const current = generation;
   try {
@@ -262,72 +309,13 @@ async function refresh() {
       ? 'Both independent pieces laid out together'
       : token.treatment === 'flat' ? 'Colorless unified geometry' : 'Printable model without project settings';
     $('export-note').innerHTML = multipart
-      ? 'Open the 3MF as a <strong>project</strong>, slice, and check both material assignments.<br>STL retains geometry but cannot retain filament assignments.'
-      : 'Open the 3MF as a <strong>project</strong>, slice, and check the preview.<br>Use the arrow for STL geometry without the filament change.';
+      ? 'Open the 3MF as a <strong>project</strong>, slice, and check both material assignments.<br>STL and SVG retain geometry but cannot retain filament assignments.'
+      : 'Open the 3MF as a <strong>project</strong>, slice, and check the preview.<br>Use the arrow for STL or SVG geometry without the filament change.';
     drawScan();
     const scanContext = $('scan-canvas').getContext('2d', { willReadFrequently: true });
     const scanImage = scanContext.getImageData(0, 0, $('scan-canvas').width, $('scan-canvas').height);
     let scan = jsQR(scanImage.data, scanImage.width, scanImage.height, { inversionAttempts: 'dontInvert' });
-    if (!scan && token.module_style === 'lines') {
-      const normalized = new Uint8ClampedArray(scanImage.data);
-      const scanScale = 870 / Math.max(token.shape_width, token.shape_height);
-      const radius = Math.max(1, Math.ceil(token.module_size * scanScale * .25));
-      const fieldHalf = (token.modules / 2 + 4) * token.module_size * scanScale;
-      const fieldCenterX = 450 + token.qr_offset_x * scanScale;
-      const fieldCenterY = 450 - token.qr_offset_y * scanScale;
-      const left = Math.max(0, Math.floor(fieldCenterX - fieldHalf));
-      const right = Math.min(scanImage.width - 1, Math.ceil(fieldCenterX + fieldHalf));
-      const top = Math.max(0, Math.floor(fieldCenterY - fieldHalf));
-      const bottom = Math.min(scanImage.height - 1, Math.ceil(fieldCenterY + fieldHalf));
-      for (let y = 0; y < scanImage.height; y++) {
-        for (let x = 0; x < scanImage.width; x++) {
-          if (x >= left && x <= right && y >= top && y <= bottom) continue;
-          const target = (y * scanImage.width + x) * 4;
-          normalized[target] = 255;
-          normalized[target + 1] = 255;
-          normalized[target + 2] = 255;
-          normalized[target + 3] = 255;
-        }
-      }
-      for (let y = top; y <= bottom; y++) {
-        for (let x = left; x <= right; x++) {
-          const source = (y * scanImage.width + x) * 4;
-          if (scanImage.data[source] + scanImage.data[source + 1] + scanImage.data[source + 2] > 240) continue;
-          for (let offset = -radius; offset <= radius; offset++) {
-            const targetY = y + offset;
-            if (targetY < top || targetY > bottom) continue;
-            const target = (targetY * scanImage.width + x) * 4;
-            normalized[target] = scanImage.data[source];
-            normalized[target + 1] = scanImage.data[source + 1];
-            normalized[target + 2] = scanImage.data[source + 2];
-            normalized[target + 3] = 255;
-          }
-        }
-      }
-      scan = jsQR(normalized, scanImage.width, scanImage.height, { inversionAttempts: 'dontInvert' });
-      if (!scan) {
-        const canonical = new Uint8ClampedArray(scanImage.width * scanImage.height * 4);
-        canonical.fill(255);
-        const pitch = Math.max(1, Math.floor(Math.min(scanImage.width, scanImage.height)
-          / (token.modules + 10)));
-        const leftEdge = Math.floor((scanImage.width - token.modules * pitch) / 2);
-        const topEdge = Math.floor((scanImage.height - token.modules * pitch) / 2);
-        for (let row = 0; row < token.modules; row++) {
-          for (let column = 0; column < token.modules; column++) {
-            if (!token.matrix[row][column]) continue;
-            for (let y = topEdge + row * pitch; y < topEdge + (row + 1) * pitch; y++) {
-              for (let x = leftEdge + column * pitch; x < leftEdge + (column + 1) * pitch; x++) {
-                const target = (y * scanImage.width + x) * 4;
-                canonical[target] = 0;
-                canonical[target + 1] = 0;
-                canonical[target + 2] = 0;
-              }
-            }
-          }
-        }
-        scan = jsQR(canonical, scanImage.width, scanImage.height, { inversionAttempts: 'dontInvert' });
-      }
-    }
+    if (!scan) scan = scanNormalizedGeometry(scanImage, token);
     if (!scan || scan.data !== token.url) throw new Error('The preview failed its independent QR scan check. Increase size or contrast.');
     token.scan_verified = true;
     await updateModel(token, current);
@@ -608,19 +596,22 @@ async function download(kind) {
   if (!valid || exporting) return;
   setDownloadMenu(false);
   exporting = true; buttons.forEach(b => {b.disabled = true;});
-  $('download-3mf').firstElementChild.textContent = kind === 'png' ? 'Preparing preview…' : 'Building watertight geometry…';
+  $('download-3mf').firstElementChild.textContent = kind === 'png' ? 'Preparing preview…'
+    : kind === 'svg' ? 'Building vector geometry…' : 'Building watertight geometry…';
   try {
     const filename = await tokenFilename(token);
-    const pngBlob = await canvasBlob($('scan-canvas'), 'image/png');
     let blob;
     if (kind === 'png') {
-      blob = pngBlob;
+      blob = await canvasBlob($('scan-canvas'), 'image/png');
+    } else if (kind === 'svg') {
+      blob = new Blob([encodeQrSvg(token)], { type: 'image/svg+xml' });
     } else {
       const module = await manifoldReady;
       const mesh = buildMesh(module, token);
       if (kind === 'stl') {
         blob = new Blob([encodeBinaryStl(mesh)], { type: 'model/stl' });
       } else {
+        const pngBlob = await canvasBlob($('scan-canvas'), 'image/png');
         const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
         const materialParts = token.treatment === 'flat' || token.construction === 'two-piece'
           ? buildMaterialMeshes(module, token) : [];
@@ -688,6 +679,7 @@ $('view-top').addEventListener('click', () => switchView('top'));
 $('download-3mf').addEventListener('click', () => download('3mf'));
 $('download-3mf-menu').addEventListener('click', () => download('3mf'));
 $('download-stl').addEventListener('click', () => download('stl'));
+$('download-svg').addEventListener('click', () => download('svg'));
 $('download-png').addEventListener('click', () => download('png'));
 $('download-menu-toggle').addEventListener('click', event => {
   event.stopPropagation();

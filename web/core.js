@@ -13,7 +13,7 @@ const TOKEN_ICONS = new Set(['none', 'instagram', 'x', 'facebook', 'linkedin', '
 const QR_MODULE_STYLES = new Set(['square', 'rounded', 'dots', 'faceted', 'triangle', 'lines']);
 const QR_FINDER_STYLES = new Set(['square', 'rounded', 'circle']);
 const QR_FINDER_CENTER_STYLES = new Set(['square', 'rounded', 'circle', 'diamond']);
-const QR_OUTER_FRAMES = new Set(['none', 'outline']);
+const QR_OUTER_FRAMES = new Set(['none', 'outline', 'double']);
 const QR_CENTER_ICONS = new Set(['none', 'blank', 'instagram', 'x', 'facebook', 'linkedin', 'youtube', 'tiktok']);
 
 function number(data, key, fallback, minimum, maximum) {
@@ -344,42 +344,104 @@ function finderOutlines(style, centerStyle, left, bottom, pitch) {
 }
 
 function styledModuleOutline(style, centerX, centerY, pitch) {
-  if (style === 'dots') return circleOutline(centerX, centerY, pitch * .48, 24);
   if (style === 'faceted') {
-    const radius = pitch * .49;
-    const cut = pitch * .16;
+    const radius = pitch * .48;
+    const cut = pitch * .28;
     return [[centerX + radius - cut, centerY + radius], [centerX - radius + cut, centerY + radius],
       [centerX - radius, centerY + radius - cut], [centerX - radius, centerY - radius + cut],
       [centerX - radius + cut, centerY - radius], [centerX + radius - cut, centerY - radius],
       [centerX + radius, centerY - radius + cut], [centerX + radius, centerY + radius - cut]]
       .map(point => point.map(value => round(value)));
   }
-  if (style === 'rounded') {
-    return roundedRectangleOutline(centerX, centerY, pitch * .96, pitch * .96, pitch * .22, 4);
-  }
   return rectangleOutline(centerX, centerY, pitch, pitch);
 }
 
-function triangleModuleOutline(row, column, centerX, centerY, pitch, featureCell) {
-  const neighborDirections = {
+function dotModuleOutlines(row, column, centerX, centerY, pitch, featureCell) {
+  const outlines = [circleOutline(centerX, centerY, pitch * .4, 24)];
+  const bridge = pitch * .56;
+  if (featureCell(row, column + 1)) {
+    outlines.push(rectangleOutline(centerX + pitch / 2, centerY, pitch, bridge));
+  }
+  if (featureCell(row + 1, column)) {
+    outlines.push(rectangleOutline(centerX, centerY - pitch / 2, bridge, pitch));
+  }
+  return outlines;
+}
+
+function moduleNeighbors(row, column, featureCell) {
+  const directions = {
     up: [-1, 0], right: [0, 1], down: [1, 0], left: [0, -1],
   };
-  const neighbors = new Set(Object.entries(neighborDirections)
+  return new Set(Object.entries(directions)
     .filter(([, [rowDelta, columnDelta]]) => featureCell(row + rowDelta, column + columnDelta))
     .map(([name]) => name));
-  const rotate = (sourcePoints, quarterTurns) => sourcePoints.map(([sourceX, sourceY]) => {
+}
+
+function rotatePoints(sourcePoints, quarterTurns) {
+  return sourcePoints.map(([sourceX, sourceY]) => {
     let x = sourceX;
     let y = sourceY;
     for (let turn = 0; turn < quarterTurns % 4; turn++) [x, y] = [-y, x];
     return [x, y];
   });
+}
+
+function roundedModuleOutline(row, column, centerX, centerY, pitch, featureCell) {
+  const neighbors = moduleNeighbors(row, column, featureCell);
+  let points;
+  if (neighbors.size === 0) {
+    return circleOutline(centerX, centerY, pitch * .47, 24);
+  }
+  if (neighbors.size === 1) {
+    const outwardTurn = { left: 0, down: 1, right: 2, up: 3 }[[...neighbors][0]];
+    const cap = [[-.5, -.5]];
+    for (let step = 0; step <= 6; step++) {
+      const angle = -Math.PI / 2 + Math.PI * step / 6;
+      cap.push([.5 * Math.cos(angle), .5 * Math.sin(angle)]);
+    }
+    cap.push([-.5, .5]);
+    points = rotatePoints(cap, outwardTurn);
+  } else if (neighbors.size === 2
+    && !((neighbors.has('left') && neighbors.has('right'))
+      || (neighbors.has('up') && neighbors.has('down')))) {
+    const physical = { up: [0, 1], right: [1, 0], down: [0, -1], left: [-1, 0] };
+    const [neighborX, neighborY] = [...neighbors].reduce(
+      ([x, y], name) => [x + physical[name][0], y + physical[name][1]], [0, 0]);
+    const roundedCorner = [-neighborX * .5, -neighborY * .5];
+    const square = [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]];
+    const cornerIndex = square.findIndex(([x, y]) => x === roundedCorner[0] && y === roundedCorner[1]);
+    const previous = square[(cornerIndex + 3) % 4];
+    const corner = square[cornerIndex];
+    const following = square[(cornerIndex + 1) % 4];
+    const radius = .5;
+    const center = [corner[0] * (1 - 2 * radius), corner[1] * (1 - 2 * radius)];
+    const before = [corner[0] + (previous[0] - corner[0]) * radius,
+      corner[1] + (previous[1] - corner[1]) * radius];
+    const after = [corner[0] + (following[0] - corner[0]) * radius,
+      corner[1] + (following[1] - corner[1]) * radius];
+    const startAngle = Math.atan2(before[1] - center[1], before[0] - center[0]);
+    let endAngle = Math.atan2(after[1] - center[1], after[0] - center[0]);
+    while (endAngle <= startAngle) endAngle += Math.PI * 2;
+    const arc = Array.from({ length: 5 }, (_, step) => {
+      const angle = startAngle + (endAngle - startAngle) * step / 4;
+      return [center[0] + radius * Math.cos(angle), center[1] + radius * Math.sin(angle)];
+    });
+    points = [...square.slice(0, cornerIndex), ...arc, ...square.slice(cornerIndex + 1)];
+  } else {
+    points = [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]];
+  }
+  return points.map(([x, y]) => [round(centerX + x * pitch), round(centerY + y * pitch)]);
+}
+
+function triangleModuleOutline(row, column, centerX, centerY, pitch, featureCell) {
+  const neighbors = moduleNeighbors(row, column, featureCell);
 
   let points;
   if (neighbors.size === 0) {
-    points = rotate([[-.46, -.48], [.5, 0], [-.46, .48]], Math.abs(row * 37 + column * 19) % 4);
+    points = rotatePoints([[-.46, -.48], [.5, 0], [-.46, .48]], Math.abs(row * 37 + column * 19) % 4);
   } else if (neighbors.size === 1) {
     const outwardTurn = { left: 0, down: 1, right: 2, up: 3 }[[...neighbors][0]];
-    points = rotate([[-.5, -.5], [.2, -.5], [.5, 0], [.2, .5], [-.5, .5]], outwardTurn);
+    points = rotatePoints([[-.5, -.5], [.2, -.5], [.5, 0], [.2, .5], [-.5, .5]], outwardTurn);
   } else if (neighbors.size === 2
     && !((neighbors.has('left') && neighbors.has('right'))
       || (neighbors.has('up') && neighbors.has('down')))) {
@@ -420,6 +482,20 @@ function perimeterFrameOutlines(outline, width, height, inset, stroke) {
   ]);
 }
 
+function outerFrameOutlines(token) {
+  if (token.outer_frame === 'none') return [];
+  const outlines = [];
+  const bandCount = token.outer_frame === 'double' ? 2 : 1;
+  const topInset = token.top_profile === 'straight' ? 0 : token.top_size;
+  for (let band = 0; band < bandCount; band++) {
+    const inset = topInset + token.outer_frame_gap
+      + band * (token.outer_frame_width + token.outer_frame_gap);
+    outlines.push(...perimeterFrameOutlines(
+      token.outline, token.shape_width, token.shape_height, inset, token.outer_frame_width));
+  }
+  return outlines;
+}
+
 function featureOutlines(token) {
   if (token.feature_outlines) return token.feature_outlines;
   const outlines = [];
@@ -444,6 +520,24 @@ function featureOutlines(token) {
           if (!featureCell(row, column)) continue;
           const [centerX, centerY] = moduleCenter(row, column);
           outlines.push(triangleModuleOutline(
+            row, column, centerX, centerY, token.module_size, featureCell));
+        }
+      }
+    } else if (token.module_style === 'rounded') {
+      for (let row = 0; row < token.modules; row++) {
+        for (let column = 0; column < token.modules; column++) {
+          if (!featureCell(row, column)) continue;
+          const [centerX, centerY] = moduleCenter(row, column);
+          outlines.push(roundedModuleOutline(
+            row, column, centerX, centerY, token.module_size, featureCell));
+        }
+      }
+    } else if (token.module_style === 'dots') {
+      for (let row = 0; row < token.modules; row++) {
+        for (let column = 0; column < token.modules; column++) {
+          if (!featureCell(row, column)) continue;
+          const [centerX, centerY] = moduleCenter(row, column);
+          outlines.push(...dotModuleOutlines(
             row, column, centerX, centerY, token.module_size, featureCell));
         }
       }
@@ -488,11 +582,7 @@ function featureOutlines(token) {
     }
     outlines.push(...(token.icon_outlines || iconOutlines(
       token.icon, token.icon_center_x, token.icon_center_y, token.icon_size)));
-    if (token.outer_frame === 'outline') {
-      const frameInset = (token.top_profile === 'straight' ? 0 : token.top_size) + .2;
-      outlines.push(...perimeterFrameOutlines(
-        token.outline, token.shape_width, token.shape_height, frameInset, token.outer_frame_width));
-    }
+    outlines.push(...outerFrameOutlines(token));
     return outlines;
   }
   for (let row = 0; row < token.modules; row++) {
@@ -518,11 +608,7 @@ function featureOutlines(token) {
   }
   outlines.push(...(token.icon_outlines || iconOutlines(
     token.icon, token.icon_center_x, token.icon_center_y, token.icon_size)));
-  if (token.outer_frame === 'outline') {
-    const frameInset = (token.top_profile === 'straight' ? 0 : token.top_size) + .2;
-    outlines.push(...perimeterFrameOutlines(
-      token.outline, token.shape_width, token.shape_height, frameInset, token.outer_frame_width));
-  }
+  outlines.push(...outerFrameOutlines(token));
   return outlines;
 }
 
@@ -571,6 +657,8 @@ export function createToken(data, profile) {
   }
   const outerFrame = data.outer_frame || 'none';
   if (!QR_OUTER_FRAMES.has(outerFrame)) throw new InputError('QR outer frame style is not supported.');
+  const outerFrameWidth = number(data, 'outer_frame_width', Math.max(.8, nozzle * 2), .4, 4);
+  const outerFrameGap = number(data, 'outer_frame_gap', .4, .2, 6);
   const centerIcon = data.center_icon || 'none';
   if (!QR_CENTER_ICONS.has(centerIcon)) throw new InputError('QR center icon is not supported.');
   if (centerIcon !== 'none' && (moduleStyle !== 'square' || finderStyle !== 'square' || finderCenterStyle !== 'square')) {
@@ -620,11 +708,13 @@ export function createToken(data, profile) {
   const modules = qr.modules.size;
   const matrix = Array.from({ length: modules }, (_, row) =>
     Array.from({ length: modules }, (_, column) => Boolean(qr.modules.get(row, column))));
-  const styleScale = { square: 1, rounded: .96, dots: .96, faceted: .96, triangle: .8, lines: .56 }[moduleStyle];
+  const styleScale = { square: 1, rounded: .94, dots: .56, faceted: .8, triangle: .8, lines: .56 }[moduleStyle];
   const minimumModule = Math.max(0.6, nozzle * 2) / styleScale;
   const perimeterInset = topProfile === 'straight' ? 0 : topSize;
-  const outerFrameWidth = outerFrame === 'outline' ? Math.max(.8, nozzle * 2) : 0;
-  const layoutClearance = padding + (outerFrame === 'outline' ? outerFrameWidth + .4 : 0);
+  const frameBandCount = outerFrame === 'double' ? 2 : outerFrame === 'outline' ? 1 : 0;
+  const frameFootprint = frameBandCount
+    ? frameBandCount * (outerFrameWidth + outerFrameGap) : 0;
+  const layoutClearance = padding + frameFootprint;
   let minimumDiameter;
   let minimumHeight;
   let diameter;
@@ -761,7 +851,8 @@ export function createToken(data, profile) {
     finder_style: finderStyle,
     finder_center_style: finderCenterStyle,
     outer_frame: outerFrame,
-    outer_frame_width: outerFrameWidth,
+    outer_frame_width: frameBandCount ? outerFrameWidth : 0,
+    outer_frame_gap: frameBandCount ? outerFrameGap : 0,
     center_icon: centerIcon,
     center_span_modules: centerSpanModules,
     center_icon_size: centerIconSize,
@@ -1136,6 +1227,26 @@ function xmlEscape(value) {
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
 }
 
+export function encodeQrSvg(token) {
+  const xs = token.outline.map(([x]) => x);
+  const ys = token.outline.map(([, y]) => y);
+  const minimumX = Math.min(...xs);
+  const maximumY = Math.max(...ys);
+  const width = Math.max(...xs) - minimumX;
+  const height = maximumY - Math.min(...ys);
+  const point = ([x, y]) => `${formatNumber(x - minimumX, 9)} ${formatNumber(maximumY - y, 9)}`;
+  const path = outlines => outlines.map(outline => `M${outline.map(point).join('L')}Z`).join('');
+  const lightColor = token.treatment === 'inset' ? token.qr_color : token.base_color;
+  const darkColor = token.treatment === 'inset' ? token.base_color : token.qr_color;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n`
+    + `<svg xmlns="http://www.w3.org/2000/svg" width="${formatNumber(width)}mm" height="${formatNumber(height)}mm" viewBox="0 0 ${formatNumber(width)} ${formatNumber(height)}" role="img">\n`
+    + `  <title>${xmlEscape(`QR token geometry for ${token.url}`)}</title>\n`
+    + `  <desc>Millimeter-scale token outline and QR geometry. The qr-geometry group includes modules, finder patterns, icons, and printable perimeter framing.</desc>\n`
+    + `  <path id="token-background" fill="${lightColor}" d="${path([token.outline])}"/>\n`
+    + `  <path id="qr-geometry" fill="${darkColor}" fill-rule="nonzero" d="${path(featureOutlines(token))}"/>\n`
+    + `</svg>\n`;
+}
+
 function metadata(key, value) {
   return `<metadata key="${xmlEscape(key)}" value="${xmlEscape(value)}"/>`;
 }
@@ -1169,7 +1280,7 @@ export async function tokenFilename(token) {
   if (token.module_style !== 'square') details.push(token.module_style);
   if (token.finder_style !== 'square') details.push(`eyes-${token.finder_style}`);
   if (token.finder_center_style !== 'square') details.push(`eye-center-${token.finder_center_style}`);
-  if (token.outer_frame !== 'none') details.push('outlined');
+  if (token.outer_frame !== 'none') details.push(token.outer_frame === 'double' ? 'double-frame' : 'outlined');
   if (token.center_icon !== 'none') details.push(`center-${token.center_icon}`);
   if (token.construction === 'two-piece') details.push('two-piece');
   details.push(token.treatment);
