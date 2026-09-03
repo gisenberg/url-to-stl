@@ -10,10 +10,6 @@ Font Awesome Free Brands 7.3.1 supplies the Instagram, X, Facebook, LinkedIn, Yo
 The generated geometry retains attribution to Fonticons, Inc., and the Pages build publishes the Font Awesome license beside the application.
 svg-pathdata 8.0.0 converts those SVG paths into printable polygon outlines at build time under its MIT license.
 
-Python dependencies are pinned in `requirements.txt` and retain their respective licenses.
-They include Flask, Manifold, NumPy, Pillow, python-qrcode, trimesh, and ZXing-C++.
-Their installed packages include their license notices.
-
 The Bambu 3MF layer-event format was informed by the existing MIT-licensed HueForge 3MF Export project and verified against Bambu Studio’s source and native exports.
 The original HueForge exporter’s notice is included as `HUEFORGE-LICENSE.txt`.
 The generator does not require that separate repository.

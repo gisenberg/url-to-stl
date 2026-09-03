@@ -5,8 +5,12 @@
   "scripts": {
     "build:icons": "node scripts/build_fontawesome_icons.mjs",
     "build:web": "npm run build:icons && node scripts/build_web.mjs",
-    "test:web": "node --test web/*.test.js",
-    "check:web": "node --check web/app.js && node --check web/core.js && node --check scripts/build_web.mjs && node --check scripts/build_fontawesome_icons.mjs"
+    "build:pages": "node scripts/build_pages.mjs",
+    "build": "npm run build:web && npm run build:pages",
+    "test": "node --test web/*.test.js",
+    "check": "node --check web/app.js && node --check web/core.js && node --check web/core.test.js && node --check web/pages.test.js && node --check scripts/build_web.mjs && node --check scripts/build_pages.mjs && node --check scripts/build_fontawesome_icons.mjs && node --check scripts/serve.mjs",
+    "serve": "node scripts/serve.mjs",
+    "dev": "npm run build && npm run serve"
   },
   "dependencies": {
     "@fortawesome/free-brands-svg-icons": "7.3.1",

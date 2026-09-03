@@ -101,44 +101,29 @@ Install Node.js 24 or newer, then build and serve the same files deployed to Git
 
 ```powershell
 npm ci
-npm run test:web
-npm run build:web
-python scripts/build_pages.py
-python -m http.server 8768 --directory _site
+npm run build
+npm test
+npm run check
+npm run serve
 ```
 
 Open <http://127.0.0.1:8768/>.
 The generated `_site` directory has no API dependency and can be hosted by any ordinary static file server.
-
-## Python CLI and local server
-
-The original Python implementation remains as an independently tested command-line exporter and optional local Flask app.
-It is useful for batch generation and cross-checking the browser implementation.
-
-```powershell
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe server.py --url https://example.com --shape rectangle --diameter 92 --shape-height 50 --corner-style custom --corner-radius 0.25 --corner-radius-unit in --padding 2 --finder-style rounded --finder-center-style circle --edge-profile chamfered --top-profile rounded --treatment inset --base 1 --relief 1 --output generated
-```
-
-Omit the generation arguments to run the Flask workspace at <http://127.0.0.1:8765/>.
-Windows users can also double-click `Start.vbs`.
+Set `QR_TOKEN_PORT` to use a port other than 8768.
 
 ## Validation
 
 ```powershell
-.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.venv\Scripts\python.exe -m pytest -q
-.venv\Scripts\python.exe -m ruff check .
 npm ci
-npm run test:web
-npm run check:web
-npm run build:web
-.venv\Scripts\python.exe tests\validate_bambu.py --workdir ..\..\work\bambu-validation --report validation\bambu-report.json
+npm run build
+npm test
+npm run check
 ```
 
-The native integration test checks every supported inset shape and lower-edge treatment, flat and two-piece modes, a rounded top edge, an Instagram business card, triangle-group and line module treatments, perimeter framing, and representative styled center-badge combinations for successful slicing, correct filament selection, and decoding of the actual sliced QR toolpaths.
-Browser-generated raised, inset, flat, and two-piece 3MF projects have also been passed through the installed Bambu Studio CLI and checked for watertight geometry, correct material assignment, and decodable sliced QR toolpaths.
+The Node test suite checks profile parsing, dimensions, all supported shapes and treatments, material parts, Manifold geometry, STL encoding, and Bambu 3MF metadata.
+The Pages-build test verifies that the deployment contains every required static asset and no server API dependency.
+The browser independently decodes every generated preview before enabling export.
+Representative raised, inset, flat, two-piece, styled, and business-card projects from the current browser exporter have also been sliced successfully with Bambu Studio and checked for material assignment and decodable top-layer toolpaths.
 No validation command starts a print job.
 
 Bambu Studio 02.07.01.62 logs `Invalid T command` for the X2D profile’s own end-of-print commands `T65279` and `T65535`, including on an untouched native cube baseline.
@@ -149,15 +134,12 @@ Physical printing has not been tested.
 ## Files
 
 - `web/`: static browser generator source and Node tests.
-- `static/`: shared workspace markup, styles, and the bundled Three.js renderer.
-- `scripts/build_web.mjs`: pinned browser bundle and license assembly.
-- `scripts/build_pages.py`: static GitHub Pages artifact assembly.
+- `static/`: page markup, styles, and the bundled Three.js renderer.
+- `scripts/build_web.mjs`: browser bundle and runtime-license assembly.
+- `scripts/build_pages.mjs`: static GitHub Pages artifact assembly.
+- `scripts/serve.mjs`: dependency-free local static server.
 - `profiles/`: native Bambu printer settings and provenance.
-- `server.py`: optional local HTTP app and command-line interface.
-- `token_model.py`: Python QR constraints, preview, and solid geometry reference.
-- `bambu_project.py`: Python template inspection and Bambu project export reference.
-- `tests/`: Python geometry, security, metadata, and native slicer validation.
-- `validation/`: recorded validation results.
+- `examples/`: representative generated 3MF, STL, PNG, and report files.
 
-The Pages workflow installs pinned Python and Node dependencies, runs both test suites, builds the browser bundle, and deploys the static app after every push to `main`.
+The Pages workflow installs only pinned Node dependencies, runs the JavaScript test and syntax-check suites, builds `_site`, and deploys the static app after every push to `main`.
 Only import Bambu templates you trust because an imported template supplies the machine G-code retained in its generated project.
