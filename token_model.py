@@ -425,134 +425,66 @@ def styled_module_outline(style, center_x, center_y, pitch):
     return rectangle_outline(center_x, center_y, pitch, pitch)
 
 
-def connected_cell_groups(cells):
-    """Return orthogonally connected cell groups in deterministic order."""
-    unseen = set(cells)
-    groups = []
-    while unseen:
-        first = min(unseen)
-        unseen.remove(first)
-        group = {first}
-        pending = [first]
-        while pending:
-            row, column = pending.pop()
-            for neighbor in (
-                (row - 1, column),
-                (row, column + 1),
-                (row + 1, column),
-                (row, column - 1),
-            ):
-                if neighbor in unseen:
-                    unseen.remove(neighbor)
-                    group.add(neighbor)
-                    pending.append(neighbor)
-        groups.append(group)
-    return groups
+def triangle_module_outline(row, column, center_x, center_y, pitch, feature_cell):
+    """Shape one data module from its neighbors using broad triangular wedges."""
+    neighbor_directions = {
+        "up": (-1, 0),
+        "right": (0, 1),
+        "down": (1, 0),
+        "left": (0, -1),
+    }
+    neighbors = {
+        name
+        for name, (row_delta, column_delta) in neighbor_directions.items()
+        if feature_cell(row + row_delta, column + column_delta)
+    }
 
+    def rotate(points, quarter_turns):
+        rotated = []
+        for x, y in points:
+            for _ in range(quarter_turns % 4):
+                x, y = -y, x
+            rotated.append((x, y))
+        return rotated
 
-def connected_triangle_outlines(cells, modules, pitch, offset_x=0, offset_y=0):
-    """Trace merged QR groups with deterministic triangular cuts along exposed edges."""
-    outlines = []
-    turn_priority = {1: 3, 0: 2, 3: 1, 2: 0}
-    for group in connected_cell_groups(cells):
-        edges = set()
-        for row, column in group:
-            left, right = column, column + 1
-            top, bottom = modules - row, modules - row - 1
-            if (row + 1, column) not in group:
-                edges.add(((left, bottom), (right, bottom)))
-            if (row, column + 1) not in group:
-                edges.add(((right, bottom), (right, top)))
-            if (row - 1, column) not in group:
-                edges.add(((right, top), (left, top)))
-            if (row, column - 1) not in group:
-                edges.add(((left, top), (left, bottom)))
+    count = len(neighbors)
+    if count == 0:
+        points = rotate(
+            [(-0.46, -0.48), (0.5, 0), (-0.46, 0.48)],
+            abs(row * 37 + column * 19) % 4,
+        )
+    elif count == 1:
+        outward_turn = {"left": 0, "down": 1, "right": 2, "up": 3}[next(iter(neighbors))]
+        points = rotate([(-0.5, -0.5), (0.2, -0.5), (0.5, 0), (0.2, 0.5), (-0.5, 0.5)], outward_turn)
+    elif count == 2 and neighbors not in ({"left", "right"}, {"up", "down"}):
+        physical = {"up": (0, 1), "right": (1, 0), "down": (0, -1), "left": (-1, 0)}
+        neighbor_x = sum(physical[name][0] for name in neighbors)
+        neighbor_y = sum(physical[name][1] for name in neighbors)
+        cut_corner = (-neighbor_x, -neighbor_y)
+        square = [(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)]
+        corner_index = square.index((0.5 * cut_corner[0], 0.5 * cut_corner[1]))
+        previous = square[corner_index - 1]
+        corner = square[corner_index]
+        following = square[(corner_index + 1) % 4]
+        cut = 0.58
+        before = (
+            corner[0] + (previous[0] - corner[0]) * cut,
+            corner[1] + (previous[1] - corner[1]) * cut,
+        )
+        after = (
+            corner[0] + (following[0] - corner[0]) * cut,
+            corner[1] + (following[1] - corner[1]) * cut,
+        )
+        points = square[:corner_index] + [before, after] + square[corner_index + 1 :]
+    else:
+        points = [(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)]
 
-        edges_by_start = {}
-        for edge in edges:
-            edges_by_start.setdefault(edge[0], []).append(edge)
-        while edges:
-            start, end = min(edges)
-            edges.remove((start, end))
-            path = [start, end]
-            while path[-1] != path[0]:
-                previous, current = path[-2], path[-1]
-                candidates = [edge for edge in edges_by_start.get(current, ()) if edge in edges]
-                if not candidates:
-                    raise RuntimeError("Connected QR boundary did not close.")
-                incoming = (current[0] - previous[0], current[1] - previous[1])
-                incoming_index = {(1, 0): 0, (0, 1): 1, (-1, 0): 2, (0, -1): 3}[incoming]
-
-                def edge_priority(edge):
-                    outgoing = (edge[1][0] - current[0], edge[1][1] - current[1])
-                    outgoing_index = {(1, 0): 0, (0, 1): 1, (-1, 0): 2, (0, -1): 3}[outgoing]
-                    return turn_priority[(outgoing_index - incoming_index) % 4]
-
-                edge = max(candidates, key=edge_priority)
-                edges.remove(edge)
-                path.append(edge[1])
-
-            path.pop()
-            jagged = []
-
-            def physical(point):
-                return (
-                    point[0] * pitch - modules * pitch / 2 + offset_x,
-                    point[1] * pitch - modules * pitch / 2 + offset_y,
-                )
-
-            def append(point):
-                rounded = (round(point[0], 6), round(point[1], 6))
-                if not jagged or rounded != jagged[-1]:
-                    jagged.append(rounded)
-
-            corners = []
-            for index, point in enumerate(path):
-                previous = path[index - 1]
-                following = path[(index + 1) % len(path)]
-                incoming = (point[0] - previous[0], point[1] - previous[1])
-                outgoing = (following[0] - point[0], following[1] - point[1])
-                cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0]
-                position = physical(point)
-                if cross > 0:
-                    variant = abs(point[0] * 37 + point[1] * 19) % 3
-                    incoming_cut = pitch * (0.18, 0.26, 0.34)[variant]
-                    outgoing_cut = pitch * (0.34, 0.18, 0.26)[variant]
-                    before = (
-                        position[0] - incoming[0] * incoming_cut,
-                        position[1] - incoming[1] * incoming_cut,
-                    )
-                    after = (
-                        position[0] + outgoing[0] * outgoing_cut,
-                        position[1] + outgoing[1] * outgoing_cut,
-                    )
-                else:
-                    before = after = position
-                corners.append((before, after))
-
-            for index, point in enumerate(path):
-                following = path[(index + 1) % len(path)]
-                direction = (following[0] - point[0], following[1] - point[1])
-                append(corners[index][1])
-                signature = abs(point[0] * 29 + point[1] * 43 + direction[0] * 11 + direction[1] * 17)
-                fraction = (0.42, 0.5, 0.58)[signature % 3]
-                depth = pitch * (0.16, 0.2, 0.24)[(signature // 3) % 3]
-                midpoint = (
-                    (point[0] + direction[0] * fraction) * pitch
-                    - modules * pitch / 2
-                    + offset_x
-                    - direction[1] * depth,
-                    (point[1] + direction[1] * fraction) * pitch
-                    - modules * pitch / 2
-                    + offset_y
-                    + direction[0] * depth,
-                )
-                append(midpoint)
-                append(corners[(index + 1) % len(path)][0])
-            if jagged[0] == jagged[-1]:
-                jagged.pop()
-            outlines.append(jagged)
-    return outlines
+    outline = [(round(center_x + x * pitch, 6), round(center_y + y * pitch, 6)) for x, y in points]
+    area = sum(
+        x * outline[(index + 1) % len(outline)][1] - outline[(index + 1) % len(outline)][0] * y
+        for index, (x, y) in enumerate(outline)
+    )
+    return outline if area > 0 else list(reversed(outline))
 
 
 def perimeter_frame_outlines(outline, width, height, inset, stroke):
@@ -747,21 +679,21 @@ class Token:
 
         if styled:
             if self.module_style == "triangle":
-                cells = {
-                    (row, column)
-                    for row in range(modules)
-                    for column in range(modules)
-                    if feature_cell(row, column)
-                }
-                outlines.extend(
-                    connected_triangle_outlines(
-                        cells,
-                        modules,
-                        self.module,
-                        self.qr_offset_x,
-                        self.qr_offset_y,
-                    )
-                )
+                for row in range(modules):
+                    for column in range(modules):
+                        if not feature_cell(row, column):
+                            continue
+                        center_x, center_y = module_center(row, column)
+                        outlines.append(
+                            triangle_module_outline(
+                                row,
+                                column,
+                                center_x,
+                                center_y,
+                                self.module,
+                                feature_cell,
+                            )
+                        )
             elif self.module_style == "lines":
                 for row in range(modules):
                     column = 0

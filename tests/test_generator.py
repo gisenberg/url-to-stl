@@ -224,12 +224,13 @@ def test_triangle_modules_union_into_one_solid_per_adjacent_group_and_scan():
         }
     )
     modules = len(token.matrix)
-    eligible = {
+    ordered_eligible = [
         (row, column)
         for row in range(modules)
         for column in range(modules)
         if token.matrix[row][column] and not is_finder_cell(row, column, modules)
-    }
+    ]
+    eligible = set(ordered_eligible)
     groups = []
     unseen = set(eligible)
     while unseen:
@@ -268,16 +269,31 @@ def test_triangle_modules_union_into_one_solid_per_adjacent_group_and_scan():
                     pending_faces.append(neighbor)
     assert mesh_groups == len(groups)
     assert any(len(group) > 4 for group in groups)
-    assert len(data_outlines) < len(eligible)
-    assert any(len(outline) > 8 for outline in data_outlines)
-    assert sum(len(outline) for outline in data_outlines) > len(eligible) * 4
+    assert len(data_outlines) == len(eligible)
+    for (row, column), outline in zip(ordered_eligible, data_outlines, strict=True):
+        neighbor_directions = {
+            "up": (row - 1, column),
+            "right": (row, column + 1),
+            "down": (row + 1, column),
+            "left": (row, column - 1),
+        }
+        neighbors = {name for name, cell in neighbor_directions.items() if cell in eligible}
+        if not neighbors:
+            expected_vertices = 3
+        elif len(neighbors) > 2 or neighbors in ({"left", "right"}, {"up", "down"}):
+            expected_vertices = 4
+        else:
+            expected_vertices = 5
+        assert len(outline) == expected_vertices
+    assert any(len(outline) == 3 for outline in data_outlines)
+    assert any(len(outline) == 4 for outline in data_outlines)
     preview_scan = zxingcpp.read_barcode(Image.open(io.BytesIO(token.png())))
     assert preview_scan is not None
     assert preview_scan.text == token.url
     test_printed_top_geometry_decodes_exact_url(token, token.mesh())
 
 
-def test_triangle_boundaries_handle_dense_groups_with_internal_holes():
+def test_triangle_modules_handle_dense_qr_patterns():
     token = create_token(
         {
             "url": f"https://example.com/{'a' * 900}",
@@ -287,15 +303,9 @@ def test_triangle_boundaries_handle_dense_groups_with_internal_holes():
         }
     )
     data_outlines = token.feature_outlines()[:-15]
-    areas = [
-        sum(
-            x * outline[(index + 1) % len(outline)][1] - outline[(index + 1) % len(outline)][0] * y
-            for index, (x, y) in enumerate(outline)
-        )
-        for outline in data_outlines
-    ]
     assert len(token.matrix) > 100
-    assert any(area < 0 for area in areas)
+    assert len(data_outlines) > 5000
+    assert all(len(outline) in {3, 4, 5} for outline in data_outlines)
     preview_scan = zxingcpp.read_barcode(Image.open(io.BytesIO(token.png())))
     assert preview_scan is not None
     assert preview_scan.text == token.url

@@ -216,16 +216,35 @@ test('triangle modules share boundaries and form connected angular groups', () =
   const token = createToken({
     url: 'https://example.com', diameter: 80, treatment: 'inset', module_style: 'triangle',
   }, parsed.profile);
-  const eligibleCells = token.matrix.reduce((count, cells, row) => count + cells.reduce(
-    (rowCount, dark, column) => rowCount + Number(dark && !(
-      (row < 7 && column < 7)
-      || (row < 7 && column >= token.modules - 7)
-      || (row >= token.modules - 7 && column < 7)
-    )), 0), 0);
+  const eligibleCells = [];
+  for (let row = 0; row < token.modules; row++) {
+    for (let column = 0; column < token.modules; column++) {
+      if (token.matrix[row][column] && !(
+        (row < 7 && column < 7)
+        || (row < 7 && column >= token.modules - 7)
+        || (row >= token.modules - 7 && column < 7)
+      )) eligibleCells.push([row, column]);
+    }
+  }
+  const eligibleSet = new Set(eligibleCells.map(cell => cell.join(',')));
   const dataOutlines = token.feature_outlines.slice(0, -15);
-  assert.ok(dataOutlines.length < eligibleCells);
-  assert.ok(dataOutlines.some(outline => outline.length > 8));
-  assert.ok(dataOutlines.reduce((count, outline) => count + outline.length, 0) > eligibleCells * 4);
+  assert.equal(dataOutlines.length, eligibleCells.length);
+  for (let index = 0; index < eligibleCells.length; index++) {
+    const [row, column] = eligibleCells[index];
+    const neighbors = new Set([
+      ['up', row - 1, column], ['right', row, column + 1],
+      ['down', row + 1, column], ['left', row, column - 1],
+    ].filter(([, neighborRow, neighborColumn]) => eligibleSet.has(`${neighborRow},${neighborColumn}`))
+      .map(([name]) => name));
+    let expectedVertices = 5;
+    if (!neighbors.size) expectedVertices = 3;
+    else if (neighbors.size > 2
+      || (neighbors.has('left') && neighbors.has('right'))
+      || (neighbors.has('up') && neighbors.has('down'))) expectedVertices = 4;
+    assert.equal(dataOutlines[index].length, expectedVertices);
+  }
+  assert.ok(dataOutlines.some(outline => outline.length === 3));
+  assert.ok(dataOutlines.some(outline => outline.length === 4));
   assert.ok(buildMesh(manifold, token).volume > 0);
 
   const denseToken = createToken({
@@ -235,12 +254,9 @@ test('triangle modules share boundaries and form connected angular groups', () =
     module_style: 'triangle',
   }, parsed.profile);
   const denseOutlines = denseToken.feature_outlines.slice(0, -15);
-  const signedArea = outline => outline.reduce((area, [x, y], index) => {
-    const following = outline[(index + 1) % outline.length];
-    return area + x * following[1] - following[0] * y;
-  }, 0);
   assert.ok(denseToken.modules > 100);
-  assert.ok(denseOutlines.some(outline => signedArea(outline) < 0));
+  assert.ok(denseOutlines.length > 5000);
+  assert.ok(denseOutlines.every(outline => [3, 4, 5].includes(outline.length)));
 });
 
 test('outer outline preserves printable QR clearance', () => {

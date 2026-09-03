@@ -360,132 +360,54 @@ function styledModuleOutline(style, centerX, centerY, pitch) {
   return rectangleOutline(centerX, centerY, pitch, pitch);
 }
 
-function connectedCellGroups(cells) {
-  const unseen = new Set(cells);
-  const groups = [];
-  while (unseen.size) {
-    const first = [...unseen].sort()[0];
-    unseen.delete(first);
-    const group = new Set([first]);
-    const pending = [first];
-    while (pending.length) {
-      const current = pending.pop();
-      const [row, column] = current.split(',').map(Number);
-      for (const neighbor of [[row - 1, column], [row, column + 1], [row + 1, column], [row, column - 1]]) {
-        const key = neighbor.join(',');
-        if (!unseen.has(key)) continue;
-        unseen.delete(key);
-        group.add(key);
-        pending.push(key);
-      }
-    }
-    groups.push(group);
-  }
-  return groups;
-}
+function triangleModuleOutline(row, column, centerX, centerY, pitch, featureCell) {
+  const neighborDirections = {
+    up: [-1, 0], right: [0, 1], down: [1, 0], left: [0, -1],
+  };
+  const neighbors = new Set(Object.entries(neighborDirections)
+    .filter(([, [rowDelta, columnDelta]]) => featureCell(row + rowDelta, column + columnDelta))
+    .map(([name]) => name));
+  const rotate = (sourcePoints, quarterTurns) => sourcePoints.map(([sourceX, sourceY]) => {
+    let x = sourceX;
+    let y = sourceY;
+    for (let turn = 0; turn < quarterTurns % 4; turn++) [x, y] = [-y, x];
+    return [x, y];
+  });
 
-function connectedTriangleOutlines(cells, modules, pitch, offsetX = 0, offsetY = 0) {
-  const outlines = [];
-  const turnPriority = [2, 3, 0, 1];
-  const directionIndex = new Map([['1,0', 0], ['0,1', 1], ['-1,0', 2], ['0,-1', 3]]);
-  const pointKey = point => point.join(',');
-  const edgeKey = edge => `${pointKey(edge[0])}:${pointKey(edge[1])}`;
-  for (const group of connectedCellGroups(cells)) {
-    const edges = new Map();
-    const outgoing = new Map();
-    const addEdge = (start, end) => {
-      const edge = [start, end];
-      edges.set(edgeKey(edge), edge);
-      const key = pointKey(start);
-      if (!outgoing.has(key)) outgoing.set(key, []);
-      outgoing.get(key).push(edge);
-    };
-    for (const cell of group) {
-      const [row, column] = cell.split(',').map(Number);
-      const left = column;
-      const right = column + 1;
-      const top = modules - row;
-      const bottom = modules - row - 1;
-      if (!group.has(`${row + 1},${column}`)) addEdge([left, bottom], [right, bottom]);
-      if (!group.has(`${row},${column + 1}`)) addEdge([right, bottom], [right, top]);
-      if (!group.has(`${row - 1},${column}`)) addEdge([right, top], [left, top]);
-      if (!group.has(`${row},${column - 1}`)) addEdge([left, top], [left, bottom]);
-    }
-
-    while (edges.size) {
-      const firstKey = [...edges.keys()].sort()[0];
-      const firstEdge = edges.get(firstKey);
-      edges.delete(firstKey);
-      const path = [firstEdge[0], firstEdge[1]];
-      while (pointKey(path.at(-1)) !== pointKey(path[0])) {
-        const previous = path.at(-2);
-        const current = path.at(-1);
-        const candidates = (outgoing.get(pointKey(current)) || [])
-          .filter(edge => edges.has(edgeKey(edge)));
-        if (!candidates.length) throw new Error('Connected QR boundary did not close.');
-        const incoming = [current[0] - previous[0], current[1] - previous[1]];
-        const incomingIndex = directionIndex.get(pointKey(incoming));
-        candidates.sort((left, right) => {
-          const priority = edge => {
-            const outgoing = [edge[1][0] - current[0], edge[1][1] - current[1]];
-            return turnPriority[(directionIndex.get(pointKey(outgoing)) - incomingIndex + 4) % 4];
-          };
-          return priority(right) - priority(left);
-        });
-        const edge = candidates[0];
-        edges.delete(edgeKey(edge));
-        path.push(edge[1]);
-      }
-      path.pop();
-      const physical = point => [point[0] * pitch - modules * pitch / 2 + offsetX,
-        point[1] * pitch - modules * pitch / 2 + offsetY];
-      const corners = [];
-      for (let index = 0; index < path.length; index++) {
-        const point = path[index];
-        const previous = path[(index - 1 + path.length) % path.length];
-        const following = path[(index + 1) % path.length];
-        const incoming = [point[0] - previous[0], point[1] - previous[1]];
-        const outgoing = [following[0] - point[0], following[1] - point[1]];
-        const cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0];
-        const position = physical(point);
-        if (cross > 0) {
-          const variant = Math.abs(point[0] * 37 + point[1] * 19) % 3;
-          const incomingCut = pitch * [.18, .26, .34][variant];
-          const outgoingCut = pitch * [.34, .18, .26][variant];
-          corners.push([
-            [position[0] - incoming[0] * incomingCut, position[1] - incoming[1] * incomingCut],
-            [position[0] + outgoing[0] * outgoingCut, position[1] + outgoing[1] * outgoingCut],
-          ]);
-        } else {
-          corners.push([position, position]);
-        }
-      }
-      const jagged = [];
-      const append = point => {
-        const rounded = point.map(value => round(value));
-        const previous = jagged.at(-1);
-        if (!previous || previous[0] !== rounded[0] || previous[1] !== rounded[1]) jagged.push(rounded);
-      };
-      for (let index = 0; index < path.length; index++) {
-        const point = path[index];
-        const following = path[(index + 1) % path.length];
-        const direction = [following[0] - point[0], following[1] - point[1]];
-        append(corners[index][1]);
-        const signature = Math.abs(point[0] * 29 + point[1] * 43
-          + direction[0] * 11 + direction[1] * 17);
-        const fraction = [.42, .5, .58][signature % 3];
-        const depth = pitch * [.16, .2, .24][Math.floor(signature / 3) % 3];
-        append([(point[0] + direction[0] * fraction) * pitch - modules * pitch / 2 + offsetX
-          - direction[1] * depth,
-        (point[1] + direction[1] * fraction) * pitch - modules * pitch / 2 + offsetY
-          + direction[0] * depth]);
-        append(corners[(index + 1) % path.length][0]);
-      }
-      if (jagged.length > 1 && pointKey(jagged[0]) === pointKey(jagged.at(-1))) jagged.pop();
-      outlines.push(jagged);
-    }
+  let points;
+  if (neighbors.size === 0) {
+    points = rotate([[-.46, -.48], [.5, 0], [-.46, .48]], Math.abs(row * 37 + column * 19) % 4);
+  } else if (neighbors.size === 1) {
+    const outwardTurn = { left: 0, down: 1, right: 2, up: 3 }[[...neighbors][0]];
+    points = rotate([[-.5, -.5], [.2, -.5], [.5, 0], [.2, .5], [-.5, .5]], outwardTurn);
+  } else if (neighbors.size === 2
+    && !((neighbors.has('left') && neighbors.has('right'))
+      || (neighbors.has('up') && neighbors.has('down')))) {
+    const physical = { up: [0, 1], right: [1, 0], down: [0, -1], left: [-1, 0] };
+    const [neighborX, neighborY] = [...neighbors].reduce(
+      ([x, y], name) => [x + physical[name][0], y + physical[name][1]], [0, 0]);
+    const cutCorner = [-neighborX * .5, -neighborY * .5];
+    const square = [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]];
+    const cornerIndex = square.findIndex(([x, y]) => x === cutCorner[0] && y === cutCorner[1]);
+    const previous = square[(cornerIndex + 3) % 4];
+    const corner = square[cornerIndex];
+    const following = square[(cornerIndex + 1) % 4];
+    const cut = .58;
+    const before = [corner[0] + (previous[0] - corner[0]) * cut,
+      corner[1] + (previous[1] - corner[1]) * cut];
+    const after = [corner[0] + (following[0] - corner[0]) * cut,
+      corner[1] + (following[1] - corner[1]) * cut];
+    points = [...square.slice(0, cornerIndex), before, after, ...square.slice(cornerIndex + 1)];
+  } else {
+    points = [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]];
   }
-  return outlines;
+
+  const signedArea = points.reduce((area, [x, y], index) => {
+    const following = points[(index + 1) % points.length];
+    return area + x * following[1] - following[0] * y;
+  }, 0);
+  if (signedArea < 0) points.reverse();
+  return points.map(([x, y]) => [round(centerX + x * pitch), round(centerY + y * pitch)]);
 }
 
 function perimeterFrameOutlines(outline, width, height, inset, stroke) {
@@ -517,14 +439,14 @@ function featureOutlines(token) {
   ];
   if (styled) {
     if (token.module_style === 'triangle') {
-      const cells = [];
       for (let row = 0; row < token.modules; row++) {
         for (let column = 0; column < token.modules; column++) {
-          if (featureCell(row, column)) cells.push(`${row},${column}`);
+          if (!featureCell(row, column)) continue;
+          const [centerX, centerY] = moduleCenter(row, column);
+          outlines.push(triangleModuleOutline(
+            row, column, centerX, centerY, token.module_size, featureCell));
         }
       }
-      outlines.push(...connectedTriangleOutlines(
-        cells, token.modules, token.module_size, token.qr_offset_x, token.qr_offset_y));
     } else if (token.module_style === 'lines') {
       for (let row = 0; row < token.modules; row++) {
         let column = 0;
